@@ -1,0 +1,42 @@
+# Scala CLI / BSP
+.scala-build/
+.scala/
+.bsp/
+.bloop/
+.metals/
+.ammonite/
+
+# Build outputs
+target/
+out/
+dist/
+build/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# VS Code
+.vscode/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Icon?
+.Spotlight-V100
+.Trashes
+.fseventsd
+.DocumentRevisions-V100
+.TemporaryItems
+.apdisk
