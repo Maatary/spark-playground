@@ -13,9 +13,13 @@ case class Adult(name: String, age: Int, birthday: Option[Int]) extends Person
 case class Child(name: String, age: Int, birthday: Option[Int], guardian: String) extends Person
 case class Senior(name: String, age: Int, birthday: Option[Int], pensionId: String) extends Person
 
+TypedEncoder[Int].encoder.schema
 
+TypedEncoder[Int].encoder.encoder.schema
 
 val optEnc = TypedEncoder[Option[Int]].encoder
+
+optEnc.encoder.schema
 
 optEnc.schema
 
@@ -31,12 +35,12 @@ val aEnc = TypedEncoder[Adult].encoder
 val resolvedEnc = aEnc.resolveAndBind()
 
 resolvedEnc
-    .schema
+    .schema //serializer schema
     .printTreeString()
 
 resolvedEnc
     .encoder
-    .schema
+    .schema //Agnostic encoder schema
     .printTreeString()
 
 "======"

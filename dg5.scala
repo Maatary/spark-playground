@@ -28,7 +28,6 @@ object dg51:
 
         case class Flight(DEST_COUNTRY_NAME: String, ORIGIN_COUNTRY_NAME: String, count: BigInt) derives TypedEncoder
 
-        spark.read.schema()
         val df = spark.read.json("data/flight-data/json/2015-summary.json")
 //
 //        val df1 = df
