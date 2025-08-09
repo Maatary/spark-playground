@@ -28,6 +28,7 @@ object dg51:
 
         case class Flight(DEST_COUNTRY_NAME: String, ORIGIN_COUNTRY_NAME: String, count: BigInt) derives TypedEncoder
 
+        spark.read.schema()
         val df = spark.read.json("data/flight-data/json/2015-summary.json")
 //
 //        val df1 = df
@@ -48,16 +49,20 @@ object dg51:
         df2.columns foreach println
 
 
-        //df2.selectExpr("DEST_COUNTRY_NAME AS destination").show(truncate = false)
+//        df2.selectExpr("DEST_COUNTRY_NAME AS destination").show(truncate = false)
 //        df2.select($"count" + 1 as "new count" ).show(truncate = false)
 //        df2.select(expr("count + 1 as newCount")).show(truncate = false)
-        //df2.select("count").show(truncate = false)
+//        df2.select("count").show(truncate = false)
         df2.select(expr("count + 1")).show(truncate = false)
 
 
-
-
-
+//        df
+//         .withColumn("Sameness", expr("DEST_COUNTRY_NAME == ORIGIN_COUNTRY_NAME")) //colum expression
+//         .show(truncate = false)
+//
+//        df
+//         .withColumn("Sameness", $"DEST_COUNTRY_NAME" === $"ORIGIN_COUNTRY_NAME") // sql text into column expression
+//         .show(truncate = false)
 
         Thread.sleep(Int.MaxValue)
 
