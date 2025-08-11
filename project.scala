@@ -26,6 +26,9 @@
 //> using dep "org.apache.hadoop:hadoop-aws:3.4.1,exclude=org.apache.logging.log4j%log4j-slf4j2-impl,exclude=org.slf4j%slf4j-reload4j,exclude=ch.qos.reload4j%reload4j"
 
 
-//> using dep "com.outr::scribe:3.16.1"          // Scribe core
-//> using dep "com.outr::scribe-cats:3.16.1"
-//> using dep "com.outr::scribe-slf4j2:3.16.1"    // SLF4J API façade + Scribe binding
+//> using dep "com.outr::scribe:3.17.0" // Scribe core
+//> using dep "com.outr::scribe-cats:3.17.0"
+//> using dep "com.outr::scribe-slf4j2:3.17.0" // SLF4J API façade + Scribe binding
+
+//> using dep "org.typelevel::cats-core:2.13.0"
+

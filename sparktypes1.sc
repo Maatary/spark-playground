@@ -7,6 +7,11 @@ import org.apache.spark.sql.types.*
 import scala.util.chaining.*
 
 
+case class Flight(DEST_COUNTRY_NAME: String, ORIGIN_COUNTRY_NAME: String, count: Int)
+
+TypedEncoder[Flight].encoder.schema pipe println
+
+
 sealed trait Person
 
 case class Adult(name: String, age: Int, birthday: Option[Int]) extends Person
