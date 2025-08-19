@@ -91,25 +91,3 @@ val fromRow = aEnc.createDeserializer()
 
 toRow(adult1)
 toRow(adult2)
-
-import io.github.pashashiz.spark_encoders.TypedEncoder.given
-
-case class Attr(name: String, value: String)
-
-case class Node(`_local_id`: String,`_urn`: String, attr: Option[List[Attr]] )
-
-val nodeEnc = implicitly[ExpressionEncoder[Node]]
-
-
-nodeEnc.schema
-
-
-nodeEnc.schema.printTreeString()
-
-val resolvedNodeEnc = nodeEnc.resolveAndBind()
-
-resolvedNodeEnc.schema.toDDL
-
-resolvedNodeEnc.schema.printTreeString()
-
-//StructType(StructField("_local_id",StringType,false),StructField("_urn",StringType,false),StructField("attr",ArrayType(StructType(StructField("name",StringType,false),StructField("value",StringType,false)),false),true))

@@ -40,3 +40,5 @@ build/
 .DocumentRevisions-V100
 .TemporaryItems
 .apdisk
+
+.databricks
