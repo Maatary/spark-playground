@@ -18,3 +18,24 @@ TypedEncoder[Adult]
     .encoder
     .schema
     .printTreeString()
+
+
+case class Flight(
+    DEST_COUNTRY_NAME  : String,
+    ORIGIN_COUNTRY_NAME: String,
+    count              : Int
+)
+
+
+TypedEncoder[Option[Flight]]
+    .encoder
+    .schema
+    .printTreeString()
+
+
+case class value(flight: Flight)
+
+TypedEncoder[value]
+    .encoder
+    .schema
+    .printTreeString()

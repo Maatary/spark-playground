@@ -221,9 +221,7 @@ object dg54:
 
 
 
-        case class Flight(DEST_COUNTRY_NAME: String, ORIGIN_COUNTRY_NAME: String, count: Int) // Added Option to remove the failure
-
-        TypedEncoder[Flight].encoder.schema pipe println
+        case class Flight(DEST_COUNTRY_NAME: String, ORIGIN_COUNTRY_NAME: String, count: Int)
 
         val flights = spark
             .read
@@ -248,7 +246,8 @@ object dg54:
         def query[T](dataset: Dataset[T])(f: Dataset[T] => IO[Unit]): IO[Unit] =
             f(dataset)
 
-        val filterFlightQuery = query(filteredFlights)(showFlight).onError(e => IO(error(s"Error: ${e.getMessage}")))
+        val filterFlightQuery = query(filteredFlights)(showFlight)
+            .onError(e => IO(error(s"Error: ${e.getMessage}")))
 
         filterFlightQuery.unsafeRunSync()
 
@@ -276,25 +275,78 @@ object dg55:
         import io.github.pashashiz.spark_encoders.TypedEncoder.given
 
 
+        case class Flight(
+            DEST_COUNTRY_NAME  : String,
+            ORIGIN_COUNTRY_NAME: String,
+            count              : Int
+        )
 
-        case class Flight(DEST_COUNTRY_NAME: String, ORIGIN_COUNTRY_NAME: String, count: Int) // Added Option to remove the failure
-
-        val flights = List(
+        val flights: Dataset[Flight] = List(
             Flight("United States", "Canada", 1000),
             Flight("France", "United Kingdom", 500),
             Flight("Japan", "China", 750)
         ).toDS()
+         .tap { _.schema.printTreeString() }
 
         flights
             .select(struct(col("*")) as "flights")
-            .tap { ds => println(ds.schema.printTreeString()) }
+            .tap { _.schema.printTreeString() }
             .show(truncate = false)
 
         flights
             .select(struct(col("*")) as "flights")
             .select(to_json($"flights") as "jsonFlights")
-            .tap { ds => println(ds.schema.printTreeString()) }
+            .tap { _.schema.printTreeString() }
             .show(truncate = false)
+
+
+
+        spark.stop()
+
+
+
+
+object dg56:
+
+    def makeSparkSession: SparkSession =
+        SparkSession
+            .builder()
+            .appName("Example Application")
+            .master("local[*]")
+            .getOrCreate()
+
+    def main(args: Array[String]): Unit =
+
+        val spark = makeSparkSession
+
+        import spark.implicits.{localSeqToDatasetHolder, rddToDatasetHolder, StringToColumn, symbolToColumn}
+        import io.github.pashashiz.spark_encoders.TypedEncoder
+        import io.github.pashashiz.spark_encoders.TypedEncoder.given
+
+
+
+        case class Flight(DEST_COUNTRY_NAME: String, ORIGIN_COUNTRY_NAME: String, count: Int) // Added Option to remove the failure
+
+        val jsonFlight =
+            """
+              |{
+              | "ORIGIN_COUNTRY_NAME":"Russia",
+              | "DEST_COUNTRY_NAME":"United States",
+              | "count":161
+              |}
+              |""".stripMargin
+
+        val jsonFlightDS = spark
+            .range(1)
+            .select(lit(jsonFlight) as "jsonFlight")
+            .select(from_json($"jsonFlight", TypedEncoder[Flight].encoder.schema, Map("mode" -> "FAILFAST")) as "flight")
+            .tap { _.schema.printTreeString() }
+            .select($"flight.*")
+            .tap { _.schema.printTreeString() }
+            .as[Flight]
+
+
+
 
 
 
