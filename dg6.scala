@@ -16,6 +16,14 @@ import scala.jdk.CollectionConverters.*
 import scala.util.chaining.*
 
 
+/**
+ * Explode:
+ *
+ * . dg61 - df explode
+ *
+ * . dg62 - ds explode
+ */
+
 object dg61:
 
     def makeSparkSession: SparkSession =
@@ -61,7 +69,11 @@ object dg61:
         spark.stop()
 
 
-
+/**
+ * Explode
+ *
+ * ds Explode
+ */
 object dg62:
 
     def makeSparkSession: SparkSession =
@@ -101,19 +113,14 @@ object dg62:
             .as[Invoice]
 
 
+        //So explode is flatMap { object => `object.array` map { elt => (object, elt)  } }.select($"_1.*", $"_2" as "word")
+        val csvSplitted = csv
+            .flatMap(invoice => invoice.Description.fold(Array(""))(_.split(" ")).map(word => (invoice, word)))
+            .select($"_1.*", $"_2" as "word")
+            .tap { ds => ds.show(truncate = false) }
+            .tap { ds => ds.schema.printTreeString() }
+            .tap { ds => ds.explain(true) }
 
-//        val csvSplitted = csv
-//            .map(invoice => (invoice, invoice.Description.fold("")(_.split(" ")) ))
-//            .tap { ds => ds.show(truncate = false) }
-//            .tap { ds => ds.schema.printTreeString() }
-//            .tap { ds => ds.explain(true) }
-
-
-//        val csvExploded = csvSplitted
-//            .select(col("*"), explode($"split") as "word")
-//            .tap { ds => ds.show(truncate = false) }
-//            .tap { ds => ds.schema.printTreeString() }
-//            .tap { ds => ds.explain(true) }
 
 
         spark.stop()
