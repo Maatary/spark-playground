@@ -1,6 +1,8 @@
 import org.apache.spark.sql.types.*
 import io.github.pashashiz.spark_encoders.TypedEncoder
 
+import scala.util.chaining.scalaUtilChainingOps
+
 sealed trait Person
 case class Adult(name: String, age: Int, birthday: Option[Int]) extends Person
 case class Child(name: String, age: Int, birthday: Option[Int], guardian: String) extends Person
@@ -23,14 +25,16 @@ TypedEncoder[Adult]
 case class Flight(
     DEST_COUNTRY_NAME  : String,
     ORIGIN_COUNTRY_NAME: String,
-    count              : Int
+    count              : Long
 )
 
 
 TypedEncoder[Option[Flight]]
     .encoder
     .schema
-    .printTreeString()
+    .tap {_.printTreeString()}
+    .tap { _.sql pipe println}
+
 
 
 case class value(flight: Flight)
