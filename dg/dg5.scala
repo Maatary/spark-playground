@@ -10,6 +10,7 @@ import cats.effect.unsafe.implicits.global
 import scala.concurrent.duration.*
 import cats.effect.*
 import cats.syntax.all.*
+import fs2.*
 
 import scribe.*
 import scribe.format.*
@@ -77,6 +78,50 @@ object dg51:
             .tap { _.show(truncate = false) }
 
         spark.stop()
+
+/**
+ * ==Spark is not 100% Lazy==
+ *
+ * RDD are Lazy, but Strcuctured API is not 100% lazy
+ *
+ * Schema inference trigger jobs
+ *
+ * Analysis is done at DataFrame/Datset Construction and it is effectful.
+ */
+object dg512:
+
+    def makeSparkSession: SparkSession =
+        SparkSession
+            .builder()
+            .appName("Example Application")
+            .master("local[*]")
+            .getOrCreate()
+
+    def main(args: Array[String]): Unit =
+
+        val spark = makeSparkSession
+
+        import spark.implicits.{localSeqToDatasetHolder, rddToDatasetHolder, StringToColumn, symbolToColumn}
+        import io.github.pashashiz.spark_encoders.TypedEncoder
+        import io.github.pashashiz.spark_encoders.TypedEncoder.given
+
+
+        //case class Flight(DEST_COUNTRY_NAME: String, ORIGIN_COUNTRY_NAME: String, count: Int)
+
+        val df = spark
+            .read
+            .option("mode", "FAILFAST")
+            .json("data/flight-data/json/2015-summary-bad-2.json")
+            //.select($"fakeCol")
+            //.tap {_.schema.printTreeString() }
+            //.tap { _.explain(true) }
+
+        Thread.sleep(Int.MaxValue)
+
+        spark.stop()
+
+
+
 
 
 /**
@@ -387,12 +432,6 @@ object dg552:
 
 
 
-
-
-
-
-
-
 /**
  * ==Happy Path Exploration==
  *
@@ -457,12 +496,12 @@ object dg57:
 
 
         df
-            .withColumn("Sameness", expr("DEST_COUNTRY_NAME == ORIGIN_COUNTRY_NAME")) //sql text into column expression
-            .show(truncate = false)
+          .withColumn("Sameness", expr("DEST_COUNTRY_NAME == ORIGIN_COUNTRY_NAME")) //sql text into column expression
+          .show(truncate = false)
 
         df
-            .withColumn("Sameness", $"DEST_COUNTRY_NAME" === $"ORIGIN_COUNTRY_NAME") //colum expression
-            .show(truncate = false)
+          .withColumn("Sameness", $"DEST_COUNTRY_NAME" === $"ORIGIN_COUNTRY_NAME") //colum expression
+          .show(truncate = false)
 
 
         val df3 = df
@@ -477,14 +516,11 @@ object dg57:
 
 
 
-
-
-
 /**
  * ==IO Experiment==
  */
 
-object dg58:
+object dg581:
 
     def makeSparkSession: SparkSession =
         SparkSession
@@ -520,10 +556,7 @@ object dg58:
 
 
         def showFlight: Dataset[Flight] => IO[Unit] =
-            ds => IO {
-                ds.show(truncate = false)
-
-            }
+            ds => IO {ds.show(truncate = false)}
 
         def query[T](dataset: Dataset[T])(f: Dataset[T] => IO[Unit]): IO[Unit] =
             f(dataset)
@@ -533,6 +566,196 @@ object dg58:
 
         filterFlightQuery.unsafeRunSync()
 
+        spark.stop()
+
+
+/**
+ * == Building Dataset is Effectfull ==
+ *
+ * Here we don't do any action but analysis occurs and and throws.
+ *
+ * Could be because of as[T].
+ *
+ * Could be because of using any column expression.
+ *
+ * Resolve and Bind check column reference.
+ */
+object dg582:
+
+    def makeSparkSession: SparkSession =
+        SparkSession
+            .builder()
+            .appName("Example Application")
+            .master("local[*]")
+            .getOrCreate()
+
+    def main(args: Array[String]): Unit =
+
+        val spark = makeSparkSession
+
+        import spark.implicits.{localSeqToDatasetHolder, rddToDatasetHolder, StringToColumn, symbolToColumn}
+        import io.github.pashashiz.spark_encoders.TypedEncoder
+        import io.github.pashashiz.spark_encoders.TypedEncoder.given
+
+
+
+        case class Flight(DEST_COUNTRY_NAME: String, ORIGIN_COUNTRY_NAME: String, count: Int)
+
+        val flights = spark
+            .read
+            .textFile("data/flight-data/json/2015-summary.json")
+            .withColumn("value", from_json($"value", TypedEncoder[Flight].encoder.schema, Map("mode" -> "PERMISSIVE")))
+            .select($"value.*")
+            .as[Flight]
+
+        val filteredFlights = flights
+            .filter($"DEST_COUNTRY_NAME" === "Senegal" or $"ORIGIN_COUNTRY_NAME" === "Senegal")
+            .select($"DEST_COUNTRY_NAME", $"count")
+            .as[Flight] // Blow at dataset construction time i.e., Analysis time !!
+
 
 
         spark.stop()
+
+
+/**
+ * Full IO experiment
+ */
+object dg583:
+
+    def makeSparkSession: SparkSession =
+        SparkSession
+            .builder()
+            .appName("Example Application")
+            .master("local[*]")
+            .getOrCreate()
+
+    def main(args: Array[String]): Unit =
+
+        val spark = makeSparkSession
+
+        import spark.implicits.{localSeqToDatasetHolder, rddToDatasetHolder, StringToColumn, symbolToColumn}
+        import io.github.pashashiz.spark_encoders.TypedEncoder
+        import io.github.pashashiz.spark_encoders.TypedEncoder.given
+
+
+
+        case class Flight(DEST_COUNTRY_NAME: String, ORIGIN_COUNTRY_NAME: String, count: Int)
+
+
+        def query[T](dataset: Dataset[T])(f: Dataset[T] => IO[Unit]): IO[Unit] =
+            f(dataset)
+
+        def showFlight: Dataset[Flight] => IO[Unit] =
+            ds => IO {ds.show(truncate = false)}
+
+        def flights: IO[Dataset[Flight]] = IO {
+            spark
+              .read
+              .textFile("data/flight-data/json/2015-summary.json")
+              .withColumn("value", from_json($"value", TypedEncoder[Flight].encoder.schema, Map("mode" -> "PERMISSIVE")))
+              .select($"value.*")
+              .as[Flight]
+        }
+
+
+        def filterFlights: Dataset[Flight] => IO[Dataset[Flight]] = flights => IO {
+            flights
+              .filter($"DEST_COUNTRY_NAME" === "Senegal" or $"ORIGIN_COUNTRY_NAME" === "Senegal")
+              .select($"DEST_COUNTRY_NAME", $"count")
+              .as[Flight]
+        }
+
+
+        import io.github.pashashiz.spark_encoders.TypedEncoder.given
+
+        val ffQuery =
+            for
+                flightDS           <- flights
+                filteredFlightsDS  <- filterFlights(flightDS)
+                ffQuery            <- query(filteredFlightsDS)(showFlight)
+            yield ffQuery
+
+
+        ffQuery
+          .onError(e => IO(error(s"Error: ${e.getMessage}")))
+          .unsafeRunSync()
+
+
+
+
+        spark.stop()
+
+
+/**
+ * == Deeper IO Experiment ==
+ *
+ *  Build Dataset i.e. Lazy Computation Effectfully
+ *
+ *  This is equivalent to IO Defer Conceptually
+ *
+ *  When run build the Lazy Computation and run it in an affect
+ *
+ */
+object dg584:
+
+    def makeSparkSession: SparkSession =
+        SparkSession
+          .builder()
+          .appName("Example Application")
+          .master("local[*]")
+          .getOrCreate()
+
+    val sparkRes = Resource.make( IO { makeSparkSession } )( spark => IO { spark.stop() } )
+
+    def main(args: Array[String]): Unit =
+
+
+       // import spark.implicits.{localSeqToDatasetHolder, rddToDatasetHolder, StringToColumn, symbolToColumn}
+        import io.github.pashashiz.spark_encoders.TypedEncoder
+        import io.github.pashashiz.spark_encoders.TypedEncoder.given
+
+        case class Flight(DEST_COUNTRY_NAME: String, ORIGIN_COUNTRY_NAME: String, count: Int)
+
+
+        def showFlightDS: Dataset[Flight] => IO[Unit] =
+            ds => IO {ds.show(truncate = false)}
+
+
+
+
+        def makeFlightDS (implicit spark: SparkSession): IO[Dataset[Flight]] = IO {
+
+            import spark.implicits.{localSeqToDatasetHolder, rddToDatasetHolder, StringToColumn, symbolToColumn}
+            spark
+              .read
+              .textFile("data/flight-data/json/2015-summary.json")
+              .withColumn("value", from_json($"value", TypedEncoder[Flight].encoder.schema, Map("mode" -> "FAILFAST")))
+              .select($"value.*")
+              .as[Flight]
+        }
+
+
+
+        def ComputeFilterFlightsDS (flights: Dataset[Flight]) (implicit spark: SparkSession): IO[Dataset[Flight]] = IO {
+
+            import spark.implicits.{localSeqToDatasetHolder, rddToDatasetHolder, StringToColumn, symbolToColumn}
+            flights
+              .filter($"DEST_COUNTRY_NAME" === "Senegal" or $"ORIGIN_COUNTRY_NAME" === "Senegal")
+              .as[Flight]
+        }
+
+
+        Stream
+          .resource( sparkRes )
+          .flatMap { implicit spark =>
+              Stream
+                .eval(makeFlightDS)
+                .evalMap(ComputeFilterFlightsDS(_))
+                .evalMap(showFlightDS)
+          }
+          .compile
+          .drain
+          .unsafeRunSync()
+
+
