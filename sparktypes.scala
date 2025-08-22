@@ -50,9 +50,9 @@ object SparkTypes11:
             .show()
 
         spark
-            .range(1)
+            .range(1) // <-- this is a dataset of Long
             .select($"id", lit(1).as("x"))
-            .selectExpr("(id, x) as complex", "*")
+            .selectExpr("(id, x) as complex", "*") //same as struct($"id", $"x")
             .withColumn("y", $"x" + 1)
             .as[Record]
             .schema
