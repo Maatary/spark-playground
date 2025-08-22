@@ -737,7 +737,7 @@ object dg584:
 
 
 
-        def ComputeFilterFlightsDS (flights: Dataset[Flight]) (implicit spark: SparkSession): IO[Dataset[Flight]] = IO {
+        def computeFilterFlightsDS (flights: Dataset[Flight]) (implicit spark: SparkSession): IO[Dataset[Flight]] = IO {
 
             import spark.implicits.{localSeqToDatasetHolder, rddToDatasetHolder, StringToColumn, symbolToColumn}
             flights
@@ -751,7 +751,7 @@ object dg584:
           .flatMap { implicit spark =>
               Stream
                 .eval(makeFlightDS)
-                .evalMap(ComputeFilterFlightsDS(_))
+                .evalMap(computeFilterFlightsDS(_))
                 .evalMap(showFlightDS)
           }
           .compile
