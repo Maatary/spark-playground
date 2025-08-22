@@ -125,10 +125,6 @@ object hps31:
 
         //df1.unionByName(df2, allowMissingColumns = true).show(truncate = false)
 
-
-
-
-
         Thread.sleep(Int.MaxValue)
 
         spark.stop()

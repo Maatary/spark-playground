@@ -35,8 +35,11 @@ def main(): Unit =
           .builder
           .appName("stateful-demo")
           .master("local[*]")
-          .config("spark.sql.streaming.stateStore.providerClass",
-                  "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
+          .config(
+              "spark.sql.streaming.stateStore.providerClass",
+              "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider"
+          )
+          .config("spark.sql.shuffle.partitions", 12)
           .getOrCreate()
 
 
@@ -82,10 +85,16 @@ def main(): Unit =
 
     import scala.util.chaining.scalaUtilChainingOps
 
+
+
+    println(s"defaultParallelism = ${spark.sparkContext.defaultParallelism}")
+    println(s"spark.sql.shuffle.partitions = ${spark.conf.get("spark.sql.shuffle.partitions")}")
+
+
     val stream = spark
       .readStream
-      .format("rate")
-      .option("numPartitions", "1")
+      .format("rate-micro-batch")
+      .option("rowsPerBatch", 100)
       .load()
       .select(
           (col("value") % 10).cast("string").as("id"),
@@ -101,8 +110,10 @@ def main(): Unit =
       .transformWithState[Out](
           new SumProc,
           TimeMode.EventTime,
-          OutputMode.Append)
-      .writeStream.format("console")
+          OutputMode.Update)
+      .tap {_.explain(true)}
+      .writeStream
+      .format("console")
       .start()
       .awaitTermination()
 
