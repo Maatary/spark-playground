@@ -86,7 +86,13 @@ object dg51:
  *
  * Schema inference trigger jobs
  *
- * Analysis is done at DataFrame/Datset Construction and it is effectful.
+ * Analysis is done at DataFrame/Datset Construction, and it is effectful.
+ *
+ *  - In this example, checking the UI shows that a job is ran although no action was called.
+ *  - It is spark schema inference job
+ *
+ *  - If we toggle ```.select($"fakeCol")``` schema analysis would be triggered.
+ *  - In this case Analysis exception would be throw because the column does not exist.
  */
 object dg512:
 
@@ -111,8 +117,8 @@ object dg512:
         val df = spark
             .read
             .option("mode", "FAILFAST")
-            .json("data/flight-data/json/2015-summary-bad-2.json")
-            //.select($"fakeCol")
+            .json("data/flight-data/json/2015-summary-bad-2.json") // <-- trigger inference job
+            //.select($"fakeCol") <-- trigger schema analysis on the driver.
             //.tap {_.schema.printTreeString() }
             //.tap { _.explain(true) }
 
