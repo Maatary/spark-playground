@@ -35,10 +35,7 @@ def main(): Unit =
           .builder
           .appName("stateful-demo")
           .master("local[*]")
-          .config(
-              "spark.sql.streaming.stateStore.providerClass",
-              "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider"
-          )
+          .config("spark.sql.streaming.stateStore.providerClass", "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
           .config("spark.sql.shuffle.partitions", 12)
           .getOrCreate()
 

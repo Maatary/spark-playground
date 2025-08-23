@@ -8,6 +8,10 @@ case class Adult(name: String, age: Int, birthday: Option[Int]) extends Person
 case class Child(name: String, age: Int, birthday: Option[Int], guardian: String) extends Person
 case class Senior(name: String, age: Int, birthday: Option[Int], pensionId: String) extends Person
 
+sealed trait Change[+T](value: T)
+case class Insert[T](value: T) extends Change[T](value)
+case class Update[T](value: T) extends Change[T](value)
+case class Delete[T](value: T) extends Change[T](value)
 
 TypedEncoder[Person]
     .encoder
@@ -22,31 +26,16 @@ TypedEncoder[Adult]
     .printTreeString()
 
 
-case class Flight(
-    DEST_COUNTRY_NAME  : String,
-    ORIGIN_COUNTRY_NAME: String,
-    count              : Long
-)
-
-
-TypedEncoder[Option[Flight]]
-    .encoder
-    .schema
-    .tap {_.printTreeString()}
-    .tap { _.sql pipe println}
-
-
-
-case class value(flight: Flight)
-
-TypedEncoder[value]
+TypedEncoder[Change[Person]]
     .encoder
     .schema
     .printTreeString()
 
-case class ID(id: Long)
 
-TypedEncoder[ID]
+val personChangerSer = TypedEncoder[Change[Person]]
     .encoder
-    .schema
-    .printTreeString()
+    .createSerializer()
+
+val insertAdult = Insert(Adult("John", 30, None))
+
+personChangerSer(insertAdult)

@@ -277,7 +277,8 @@ object dg34:
         //
         //        flightData2015
         //            .as[Flight]
-        //            .map(flight => flight.DEST_COUNTRY_NAME).toDF("DEST_COUNTRY_NAME")
+        //            .map(flight => flight.DEST_COUNTRY_NAME)
+        //            .toDF("DEST_COUNTRY_NAME")
         //            .show()
 
         //        spark

@@ -1,6 +1,8 @@
 //> using scala 3.7.0
 
 //> using options -Xmax-inlines 128
+//> using options -explain
+
 
 //> using javaOpt "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED"
 //> using javaOpt "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
