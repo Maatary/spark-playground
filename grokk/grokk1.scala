@@ -86,6 +86,18 @@ def main(): Unit =
 
 /**
  * == Grokking MapGroups ==
+ *
+ *
+ * == Note on Schema for Atomic Types ==
+ *
+ *  For atomic types, Dataset[T] displays as a single column named "value" when viewed as a DataFrame.
+ *
+ *  There are exceptions such as for the Dataset produced by spark.range which define its own column names (e.g., "id").
+ *
+ *  To be more accurate, the schema of the data is a column named "value" with the type of the atomic type.
+ *
+ *  In the case of a Dataset[Long] produced by Range the schema is a column named "id" with the type of Long.
+ *  i.e. The Schema is hardcoded.
  */
 object grokk2:
 
@@ -111,19 +123,28 @@ object grokk2:
 
 
         val sc      = spark.sparkContext
-        val base    = sc.parallelize(1 to 9, 3).toDS()
+        val base    = sc
+          .parallelize(1 to 9, 3)
+          .toDS()
+          .persist()
+          .tap {_.printSchema()} //<-- Dataset[primitiveType] always translate to a schema with on column, named value.
 
-        val squared = base map { x => { println(s"map $x"); x * x } }
+        val squared = base
+          .map { x => { println(s"map $x"); x * x } } //<-- just for debug to show it is happening concurrently
+          .persist()
+          .tap {_.printSchema()} //<-- Dataset[primitiveType] always translate to a schema with on column, named value.
 
         val buckets = squared
-            .groupByKey(x => x % 2)
-            .mapGroups((k, it) => (k, it.toList)) // 2 shuffle partitions
+            .groupByKey(x => x % 2)  //<-- Key = 0 | 1
+            .mapGroups((k, it) => (k, it.toList)) // 2 groups
             .persist()
             .tap {_.printSchema()}
             .tap {_.explain(true)}
             .tap {_.show()}
 
-        buckets.collect().foreach(println)
+        buckets
+          .collect()
+          .foreach(println)
 
         Thread.sleep(Int.MaxValue)
 
