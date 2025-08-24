@@ -4,9 +4,9 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.*
 import org.apache.spark.sql.types.StructField
 import org.apache.spark.storage.StorageLevel
+
 import scribe.*
 import scribe.format.*
-
 import scala.util.chaining.*
 
 
@@ -54,7 +54,7 @@ object dg31:
 
 
 /**
- * == Dataset Reuse Without Caching ==
+ * == Dataset Reuse With Caching ==
  *
  * This demonstrates the use dataframe persistence
  *
@@ -163,11 +163,11 @@ object dg32:
  *
  * === UserIdDS is essentially re-computed 3 times: ===
  *
- * 1. when make userIdDS
+ * 1. when we make userIdDS
  *
- * 2. when make activitiesDS with Aggregation-based count (returns DataFrame)
+ * 2. when we make activitiesDS with Aggregation-based count (returns DataFrame)
  *
- * 3. when make activitiesDS with Action-based count (returns Long)
+ * 3. when we make activitiesDS with Action-based count (returns Long)
  *
  *
  * == Action-based Aggregation vs Dataframe-based Aggregation==
@@ -267,7 +267,7 @@ object dg34:
         import io.github.pashashiz.spark_encoders.TypedEncoder.*
         import io.github.pashashiz.spark_encoders.TypedEncoder.given
 
-        case class Flight(DEST_COUNTRY_NAME: String, ORIGIN_COUNTRY_NAME: String, count: BigInt)
+        case class Flight(DEST_COUNTRY_NAME: String, ORIGIN_COUNTRY_NAME: String, count: Long)
 
         //        val flightData2015 = spark
         //            .read
@@ -281,18 +281,49 @@ object dg34:
         //            .toDF("DEST_COUNTRY_NAME")
         //            .show()
 
-        //        spark
-        //            .range(10)
-        //            .rdd
-        //            .tap { rdd => println(s"the RDD type is: ${rdd.toDebugString}") }
-        //            .getNumPartitions
-        //            .pipe { n => println(s"\nthe number of partition is: $n\n") }
+        Thread.sleep(Int.MaxValue)
 
-        //        val sc      = spark.sparkContext
-        //        val base    = sc.parallelize(1 to 9, 3).toDS()
-        //        val squared = base.map(x => {println(s"map $x"); x * x})
-        //        val buckets = squared.groupByKey(x => x % 2).mapGroups((k, it) => (k, it.toList)) // 2 shuffle partitions
-        //        buckets.collect().foreach(println)
+        spark.stop()
+
+
+/**
+ * == RDD Debug Info & NumPartitions ==
+ *
+ * Range - a Relation Expression - produces a dataset of rows inline with spark default parallelism
+ * i.e. partitioned by the number of cores in the cluster
+ *
+ * That is the rows of the Relation i.e. the Dataset are partitioned by the number of cores in the cluster
+ *
+ */
+
+object dg35:
+
+    Logger.root
+          .clearHandlers()
+          .withHandler(minimumLevel = Some(Level.Error)) // no handler building needed
+          .replace()
+
+    def makeSparkSession: SparkSession =
+        SparkSession
+          .builder()
+          .appName("Example Application")
+          .master("local[*]")
+          .getOrCreate()
+
+    def main(args: Array[String]): Unit =
+
+        val spark = makeSparkSession
+
+        import spark.implicits.{localSeqToDatasetHolder, rddToDatasetHolder, StringToColumn, symbolToColumn}
+        import io.github.pashashiz.spark_encoders.*
+        import io.github.pashashiz.spark_encoders.TypedEncoder.*
+        import io.github.pashashiz.spark_encoders.TypedEncoder.given
+
+        spark
+            .range(10) // <-- Uses default parallelism
+            .rdd // <-- number of partition is default parallelism
+            .tap { rdd => println(s"RDD debug Info::\n ${rdd.toDebugString}") }
+            .tap { rdd => println(s"RDD number of partition: ${rdd.getNumPartitions}\n") }
 
         Thread.sleep(Int.MaxValue)
 
