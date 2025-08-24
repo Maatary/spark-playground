@@ -248,6 +248,19 @@ object dg33:
         spark.stop()
 
 
+/**
+ *  == csv inferencing quirk ==
+ *
+ *  CSV does 2 extract side effect job with infer schema and header.
+ *  In contrast, JSON does not have the header issue and only does the extract infer schema job.
+ *
+ *  - It read the first row for the header
+ *  - it read enough of the content to infer the schema
+ *
+ *  ''__Note__: put the header in the csv file if you want to avoid to avoid trouble e.g. read the header which
+ *  is text only i.e. title, and mismatch against the data that have a different structure''
+ *
+ */
 
 object dg34:
 
@@ -269,17 +282,18 @@ object dg34:
 
         case class Flight(DEST_COUNTRY_NAME: String, ORIGIN_COUNTRY_NAME: String, count: Long)
 
-        //        val flightData2015 = spark
-        //            .read
-        //            .option("inferSchema", "true")
-        //            .option("header", "true")
-        //            .csv("data/flight-data/csv/2015-summary.csv")
-        //
-        //        flightData2015
-        //            .as[Flight]
-        //            .map(flight => flight.DEST_COUNTRY_NAME)
-        //            .toDF("DEST_COUNTRY_NAME")
-        //            .show()
+        val flightData2015 = spark
+            .read
+            //.schema(TypedEncoder[Flight].encoder.schema) // <-- With this no side effect job of schema inference.
+            .option("inferSchema", "true") // <-- Side Effect - Spark run a job to read enough data to infer the schema
+            .option("header", "true")
+            .csv("data/flight-data/csv/2015-summary.csv")
+            .as[Flight] // <-- can break if the schema doesn't match the inference ! better do .schema(encoder.schema) instead
+            .map(flight => flight.DEST_COUNTRY_NAME) // <- Can blow at runtime with nullability more so when the read is permissive
+            .toDF("DEST_COUNTRY_NAME")
+            .tap { _.printSchema() }
+            .tap { _.explain(true) }
+            .show()
 
         Thread.sleep(Int.MaxValue)
 
