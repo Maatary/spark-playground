@@ -123,6 +123,7 @@ object grokk2:
             .builder()
             .appName("Example Application")
             .master("local[*]")
+            .config("spark.sql.shuffle.partitions", 2)
             .getOrCreate()
 
     def main(args: Array[String]): Unit =
@@ -136,18 +137,18 @@ object grokk2:
 
         val sc      = spark.sparkContext
         val base    = sc
-          .parallelize(1 to 9, 3)
+          .parallelize(1 to 9, 3) // <-- 3 partitions
           .toDS()
           .persist()
           .tap {_.printSchema()} //<-- Dataset[primitiveType] always translate to a schema with on column, named value.
 
         val squared = base
-          .map { x => { println(s"map $x"); x * x } } //<-- just for debug to show it is happening concurrently
+          .map { x => { println(s"map $x"); x * x } } //<-- map is just for debug to show it is happening concurrently
           .persist()
           .tap {_.printSchema()} //<-- Dataset[primitiveType] always translate to a schema with on column, named value.
 
         val buckets = squared.repartition()
-            .groupByKey(x => x % 2)  //<-- Key = 0 | 1
+            .groupByKey(x => x % 2)  //<-- Key = 0 | 1 . spark.sql.shuffle.partitions created, 200 by default
             .mapGroups((k, it) => (k, it.toList)) // 2 groups
             .persist()
             .tap {_.printSchema()}
