@@ -11,29 +11,22 @@ import scribe.*
 import scribe.format.*
 import scala.util.chaining.*
 
-
-/**
- * == Grokking Spark Session ==
- *
- * === Exploring the bare spark configuration ===
- *
- *  - Notice that a lot of configuration available on databricks are not set up at all
- *
- *      - s3 config such as hadoop file system sa3 or credential provider,
- *      - Rocksdb config, delta config
- *
- *
- * === Initial exploration of separation of concerns ===
- *
- *  - Without IO
- *
- *  - Without separating transformation and action
- *
- *  Pure Naive exploration.
- *
-
- *
- */
+/** ==Grokking Spark Session==
+  *
+  * ===Exploring the bare spark configuration===
+  *
+  *   - Notice that a lot of configuration available on databricks are not set up at all
+  *
+  *   - s3 config such as hadoop file system sa3 or credential provider,
+  *   - Rocksdb config, delta config
+  *
+  * ===Initial exploration of separation of concerns===
+  *
+  *   - Without IO
+  *   - Without separating transformation and action
+  *
+  * Pure Naive exploration.
+  */
 object ProgramLogic:
 
     def query(spark: SparkSession): Unit =
@@ -41,32 +34,29 @@ object ProgramLogic:
         import org.apache.spark.sql.functions.col
 
         Seq(4, 2, 3)
-          .toDS
-          .groupByKey( _ % 2)
-          .count()
-          .toDF("key", "count") //instead of count(1) as col name for the count
-          .show()
-
+            .toDS
+            .groupByKey(_ % 2)
+            .count()
+            .toDF("key", "count") // instead of count(1) as col name for the count
+            .show()
 
     def makeSparkSession: SparkSession =
         SparkSession
-          .builder()
-          .appName("Example Application")
-          .master("local[*]")
-          .getOrCreate()
-
+            .builder()
+            .appName("Example Application")
+            .master("local[*]")
+            .getOrCreate()
 
     def runQuery(query: SparkSession => Unit)(spark: SparkSession): Unit =
         query(spark)
-
 
 @main
 def main(): Unit =
 
     Logger.root
-          .clearHandlers()
-          .withHandler(minimumLevel = Some(Level.Error)) // no handler building needed
-          .replace()
+        .clearHandlers()
+        .withHandler(minimumLevel = Some(Level.Error)) // no handler building needed
+        .replace()
 
     import ProgramLogic.*
 
@@ -74,8 +64,8 @@ def main(): Unit =
 
     spark.conf.getAll.foreach(println)
 
-    //println(spark.conf.get("spark.hadoop.fs.s3.impl")) //<-- This need to be set explicitly
-    //println(spark.conf.get("spark.hadoop.fs.s3a.impl")) //< -- This need to be set explicitly
+    // println(spark.conf.get("spark.hadoop.fs.s3.impl")) //<-- This need to be set explicitly
+    // println(spark.conf.get("spark.hadoop.fs.s3a.impl")) //< -- This need to be set explicitly
 
     runQuery(query)(spark)
 
@@ -83,40 +73,36 @@ def main(): Unit =
 
     spark.stop() // <-- Allways close spark session - A resource that needs closing
 
-
-/**
- * == Grokking MapGroups ==
- *
- *  Number of shuffle partitions in structured api is controlled by spark.sql.shuffle.partitions
- *  Optionally it can be controlled by def repartition(numPartitions: Int, partitionExprs: Column*).
- *
- *  RDD lineage carries dependencies and partitioning/partitioner metadata; narrow transforms preserve the
- *  parent’s partitioning, so the planner can skip reshuffles when requirements are already met. Only wide
- *  ops (repartition, groupByKey/join/aggregate) introduce a shuffle and thus set the shuffle partition count.
- *
- *  '''groupByKey''' computes the key and triggers a hash-partitioning shuffle; the number of shuffle partitions
- *  comes from spark.sql.shuffle.partitions (AQE may coalesce/split). There is no per-call knob on groupByKey
- *  to set this; if you need control, repartition(...) upstream or rely on AQE.
- *  Enable AQE to coalesce shuffle partitions dynamically: spark.sql.adaptive.enabled=true and related settings.
-
- *
- * == Note on Schema for Atomic Types ==
- *
- *  For atomic types, Dataset[T] displays as a single column named "value" when viewed as a DataFrame.
- *
- *  There are exceptions such as for the Dataset produced by spark.range which define its own column names (e.g., "id").
- *
- *  To be more accurate, the schema of the data is a column named "value" with the type of the atomic type.
- *
- *  In the case of a Dataset[Long] produced by Range the schema is a column named "id" with the type of Long.
- *  i.e. The Schema is hardcoded.
- */
+/** ==Grokking MapGroups==
+  *
+  * Number of shuffle partitions in structured api is controlled by spark.sql.shuffle.partitions Optionally it can be controlled by def
+  * repartition(numPartitions: Int, partitionExprs: Column*).
+  *
+  * RDD lineage carries dependencies and partitioning/partitioner metadata; narrow transforms preserve the parent’s partitioning, so the planner can
+  * skip reshuffles when requirements are already met. Only wide ops (repartition, groupByKey/join/aggregate) introduce a shuffle and thus set the
+  * shuffle partition count.
+  *
+  * '''groupByKey''' computes the key and triggers a hash-partitioning shuffle; the number of shuffle partitions comes from
+  * spark.sql.shuffle.partitions (AQE may coalesce/split). There is no per-call knob on groupByKey to set this; if you need control, repartition(...)
+  * upstream or rely on AQE. Enable AQE to coalesce shuffle partitions dynamically: spark.sql.adaptive.enabled=true and related settings.
+  *
+  * ==Note on Schema for Atomic Types==
+  *
+  * For atomic types, Dataset[T] displays as a single column named "value" when viewed as a DataFrame.
+  *
+  * There are exceptions such as for the Dataset produced by spark.range which define its own column names (e.g., "id").
+  *
+  * To be more accurate, the schema of the data is a column named "value" with the type of the atomic type.
+  *
+  * In the case of a Dataset[Long] produced by Range the schema is a column named "id" with the type of Long. i.e. The Schema is hardcoded.
+  */
 object grokk2:
 
     Logger.root
-          .clearHandlers()
-          .withHandler(minimumLevel = Some(Level.Error)) // no handler building needed
-          .replace()
+        .clearHandlers()
+        .withHandler(minimumLevel = Some(Level.Error)) // no handler building needed
+        .replace()
+
 
     def makeSparkSession: SparkSession =
         SparkSession
@@ -130,34 +116,36 @@ object grokk2:
 
         val spark = makeSparkSession
 
-
         import spark.implicits.{localSeqToDatasetHolder, rddToDatasetHolder, StringToColumn, symbolToColumn}
         import io.github.pashashiz.spark_encoders.TypedEncoder.given
 
+        case class NumGroup(key: Int, values: List[Int])
 
-        val sc      = spark.sparkContext
-        val base    = sc
-          .parallelize(1 to 9, 3) // <-- 3 partitions
-          .toDS()
-          .persist()
-          .tap {_.printSchema()} //<-- Dataset[primitiveType] always translate to a schema with on column, named value.
+        val sc   = spark.sparkContext
+        val base = sc
+            .parallelize(1 to 9, 3)  // <-- 3 partitions
+            .toDS()
+            .persist()
+            .tap { _.printSchema() } // <-- Dataset[primitiveType] always translate to a schema with on column, named value.
 
         val squared = base
-          .map { x => { println(s"map $x"); x * x } } //<-- map is just for debug to show it is happening concurrently
-          .persist()
-          .tap {_.printSchema()} //<-- Dataset[primitiveType] always translate to a schema with on column, named value.
+            .map { x => { println(s"map $x"); x * x } } // <-- map is just for debug to show it is happening concurrently
+            .persist()
+            .tap { _.printSchema() }                    // <-- Dataset[primitiveType] always translate to a schema with on column, named value.
 
         val buckets = squared.repartition()
-            .groupByKey(x => x % 2)  //<-- Key = 0 | 1 . spark.sql.shuffle.partitions created, 200 by default
+            .groupByKey(x => x % 2) // <-- Key = 0 | 1 . spark.sql.shuffle.partitions created, 200 by default
             .mapGroups((k, it) => (k, it.toList)) // 2 groups
+            //.toDF("key", "values") <-- if we to have a nice schema instead of _1 and _2 of Product2
+            //.as[NumGroup] <-- typecheck our schema and convert to dataset[T]
             .persist()
-            .tap {_.printSchema()}
-            .tap {_.explain(true)}
-            .tap {_.show()}
+            .tap { _.printSchema() }
+            .tap { _.explain(true) }
+            .tap { _.show() }
 
         buckets
-          .collect()
-          .foreach(println)
+            .collect()
+            .foreach(println)
 
         Thread.sleep(Int.MaxValue)
 
