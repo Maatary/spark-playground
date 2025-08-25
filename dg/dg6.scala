@@ -17,14 +17,50 @@ import scala.util.chaining.*
 
 
 /**
- * Explode:
+ *  == Basic Explode ==
  *
- * . dg61 - df explode
+ *  classic explode with basic input to make it easy to understand
+ */
+object dg61:
+
+    def makeSparkSession: SparkSession =
+        SparkSession
+            .builder()
+            .appName("Example Application")
+            .master("local[*]")
+            .getOrCreate()
+
+    def main(args: Array[String]): Unit =
+
+        val spark = makeSparkSession
+
+        import spark.implicits.{localSeqToDatasetHolder, rddToDatasetHolder, StringToColumn, symbolToColumn}
+        import io.github.pashashiz.spark_encoders.TypedEncoder.given
+
+
+        val df = Seq(
+            (1, Seq("a", "b", "c")),
+            (2, Seq("x", "y"))
+        ).toDF("id", "arr")
+         .select($"id", explode($"arr") as "word")
+         .tap { ds => ds.schema.printTreeString() }
+         .tap { ds => ds.explain(true) }
+         .tap { ds => ds.show(truncate = false) }
+
+
+        spark.stop()
+
+
+
+
+/**
+ * == Classic DF Explode ==
  *
- * . dg62 - ds explode
+ * Contrast it with [[dg63]]
+ *
  */
 
-object dg61:
+object dg62:
 
     def makeSparkSession: SparkSession =
         SparkSession
@@ -45,22 +81,22 @@ object dg61:
         val csv = spark
             .read
             .format("csv")
-            .option("header", "true")
-            .option("inferSchema", "true")
+            .option("header", "true") // <-- Will trigger side effect on building the csv dataframe "expression" i.e. without action
+            .option("inferSchema", "true")  // <-- Will trigger side effect on building the csv dataframe "expression" i.e. without action
             .load("data/retail-data/all/online-retail-dataset.csv")
             .tap { ds => ds.schema.printTreeString() }
 
 
 
         val csvSplitted = csv
-            .withColumn("split", split($"Description", " "))
+            .withColumn("split", split($"Description", " "))  //<-- create the array column
             .tap { ds => ds.show(truncate = false) }
             .tap { ds => ds.schema.printTreeString() }
             .tap { ds => ds.explain(true) }
 
 
         val csvExploded = csvSplitted
-            .select(col("*"), explode($"split") as "word")
+            .select(col("*"), explode($"split") as "word") // <-- explode the array column
             .tap { ds => ds.show(truncate = false) }
             .tap { ds => ds.schema.printTreeString() }
             .tap { ds => ds.explain(true) }
@@ -70,11 +106,11 @@ object dg61:
 
 
 /**
- * Explode
+ *  == Manual DS Explode using FlatMap ==
  *
- * ds Explode
+ *  Contrast it with [[dg62]]
  */
-object dg62:
+object dg63:
 
     def makeSparkSession: SparkSession =
         SparkSession
