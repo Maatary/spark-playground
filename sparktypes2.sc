@@ -17,6 +17,7 @@ import scala.util.chaining.*
  *
  * What the API builds
  * -------------------
+ *
  * - Column is a builder/wrapper for an expression in the Structured API's expression language
  *   (the DataFrame expression AST, a.k.a. ColumnNode). Evaluation is deferred.
  * - Spark Classic translates this AST to Catalyst; you don’t need Catalyst to reason correctly.
@@ -40,6 +41,7 @@ import scala.util.chaining.*
  *
  * Column reference expression
  * ---------------------------
+ *
  * - Purpose:  build a *lookup-by-name* expression.
  *   Plain English:
  *    - Copy the input column named "x"
@@ -72,6 +74,7 @@ import scala.util.chaining.*
  *
  * Selectors (using composite columns)
  * -----------------------------------
+ *
  * - These build selector expressions; they do not evaluate anything at build time.
  * - Struct:
  *     col("s")("a")    // select field "a" from struct column "s"
@@ -85,6 +88,7 @@ import scala.util.chaining.*
  *
  * Names vs expressions (don’t mix them)
  * -------------------------------------
+ *
  * - col(name: String): Column          // expects a *name* (identifier) only
  *   - col("x") ✅ ; col("x + 1") ❌ (not a name)
  * - expr(sql: String): Column          // parses an *expression* (any term)
@@ -95,6 +99,7 @@ import scala.util.chaining.*
  *
  * Literals
  * --------
+ *
  * - lit(v: Any): Column                // builds a literal (closed) expression; not an “attribute”
  *
  * API expectations (typed)
@@ -133,6 +138,8 @@ col1.node
 //can't do that without spark session implicit
 import org.apache.spark.sql.catalyst.dsl.expressions.StringToAttributeConversionHelper
 $"col2"
+import org.apache.spark.sql.catalyst.expressions.Literal
+Literal(1).eval()
 
 lit(1).node
 lit(3).as("col3").node
