@@ -19,7 +19,6 @@ TypedEncoder[Person]
     .printTreeString()
 
 
-
 TypedEncoder[Adult]
     .encoder
     .schema
@@ -38,4 +37,4 @@ val personChangerSer = TypedEncoder[Change[Person]]
 
 val insertAdult = Insert(Adult("John", 30, None))
 
-personChangerSer(insertAdult)
+val personInternalRow = personChangerSer(insertAdult)

@@ -9,11 +9,12 @@ import scala.util.chaining.*
 
 case class Flight(DEST_COUNTRY_NAME: String, ORIGIN_COUNTRY_NAME: String, count: Int)
 
-TypedEncoder[Flight].encoder.schema pipe println
+TypedEncoder[Flight]
+  .encoder
+  .schema pipe println
 
 
 sealed trait Person
-
 case class Adult(name: String, age: Int, birthday: Option[Int]) extends Person
 case class Child(name: String, age: Int, birthday: Option[Int], guardian: String) extends Person
 case class Senior(name: String, age: Int, birthday: Option[Int], pensionId: String) extends Person
@@ -48,7 +49,7 @@ resolvedEnc
     .schema //Agnostic encoder schema
     .printTreeString()
 
-"======"
+"======" pipe println
 
 resolvedEnc
     .deserializer
@@ -62,7 +63,7 @@ resolvedEnc
     .deserializer
     .treeString
 
-"======="
+"======" pipe println
 
 resolvedEnc
     .serializer
@@ -78,12 +79,10 @@ resolvedEnc
     .foreach(e => println(e.treeString))
 
 
-"======"
+"======" pipe println
 
 val adult1 = Adult("John", 30, None)
 val adult2 = Adult("Smith", 40, Some(2))
-
-
 
 
 val toRow  = aEnc.createSerializer()
