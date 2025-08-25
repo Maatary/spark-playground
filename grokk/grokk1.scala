@@ -87,6 +87,18 @@ def main(): Unit =
 /**
  * == Grokking MapGroups ==
  *
+ *  Number of shuffle partitions in structured api is controlled by spark.sql.shuffle.partitions
+ *  Optionally it can be controlled by def repartition(numPartitions: Int, partitionExprs: Column*).
+ *
+ *  RDD lineage carries dependencies and partitioning/partitioner metadata; narrow transforms preserve the
+ *  parent’s partitioning, so the planner can skip reshuffles when requirements are already met. Only wide
+ *  ops (repartition, groupByKey/join/aggregate) introduce a shuffle and thus set the shuffle partition count.
+ *
+ *  '''groupByKey''' computes the key and triggers a hash-partitioning shuffle; the number of shuffle partitions
+ *  comes from spark.sql.shuffle.partitions (AQE may coalesce/split). There is no per-call knob on groupByKey
+ *  to set this; if you need control, repartition(...) upstream or rely on AQE.
+ *  Enable AQE to coalesce shuffle partitions dynamically: spark.sql.adaptive.enabled=true and related settings.
+
  *
  * == Note on Schema for Atomic Types ==
  *
@@ -134,7 +146,7 @@ object grokk2:
           .persist()
           .tap {_.printSchema()} //<-- Dataset[primitiveType] always translate to a schema with on column, named value.
 
-        val buckets = squared
+        val buckets = squared.repartition()
             .groupByKey(x => x % 2)  //<-- Key = 0 | 1
             .mapGroups((k, it) => (k, it.toList)) // 2 groups
             .persist()
