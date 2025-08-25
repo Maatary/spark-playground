@@ -75,7 +75,7 @@ def main(): Unit =
                                       key: String,
                                       rows: Iterator[In],
                                       timers: TimerValues): Iterator[Out] =
-            val current = if (sum.exists()) sum.get() else 0L
+            val current = if sum.exists() then sum.get() else 0L
             val newTotal = current + rows.map(_.value).sum
             sum.update(newTotal)
             Iterator(Out(key, newTotal))
