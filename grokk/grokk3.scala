@@ -2,10 +2,9 @@
 
 package grokk.grokk3
 
-
-import org.apache.spark.sql.{SparkSession, functions as F}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.functions.*
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import scribe.*
 import scribe.format.*
@@ -27,12 +26,16 @@ object StreamingGroupByMemorySinkDemo {
             .replace()
 
         // 1. SparkSession in local mode
-        val spark = SparkSession.builder()
+        val spark = SparkSession
+            .builder()
             .appName("Memory-source groupBy demo")
+            .config("spark.sql.streaming.stateStore.providerClass",
+                    "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
+            .config("spark.sql.shuffle.partitions", 12)
             .master("local[*]")
             .getOrCreate()
 
-        import spark.implicits._
+        import spark.implicits.{localSeqToDatasetHolder, rddToDatasetHolder, StringToColumn, symbolToColumn}
         import io.github.pashashiz.spark_encoders.TypedEncoder.given
 
         // 2. MemoryStream source (requires an implicit SQLContext)
@@ -46,12 +49,12 @@ object StreamingGroupByMemorySinkDemo {
         // 4. Aggregation in **Update** output mode
         val agg = users
             .groupBy($"location")
-            .agg(F.collect_list($"user_id").as("users"))
+            .agg(collect_list($"user_id").as("users"))
 
         val query = agg.writeStream
-            .outputMode(OutputMode.Complete) // changelog-style: only rows that changed
-            .format("memory")                // in-process sink we can query with SQL
-            .queryName("agg_table")          // must give it a name for memory sink
+            .outputMode(OutputMode.Update) // changelog-style: only rows that changed
+            .format("memory")              // in-process sink we can query with SQL
+            .queryName("agg_table")        // must give it a name for memory sink
             .start()
 
         // Helper to dump the current sink content
@@ -79,7 +82,6 @@ object StreamingGroupByMemorySinkDemo {
         showSnapshot("after batch 2")
 
         // 6. Clean up
-        query.stop()
         spark.stop()
     }
 }
@@ -88,23 +90,25 @@ object StreamingGroupByConsoleDemo {
 
     case class User(user_id: Long, location: String)
 
+
     def main(args: Array[String]): Unit = {
 
         Logger.root
             .clearHandlers()
-            .withHandler(minimumLevel = Some(Level.Info)) // no handler building needed
+            .withHandler(minimumLevel = Some(Level.Error)) // no handler building needed
             .replace()
 
         // 1. SparkSession ----------------------------------------------------------
-        val spark = SparkSession.builder()
+        val spark = SparkSession
+            .builder()
             .appName("console-sink demo")
             .master("local[*]")
             .config("spark.sql.streaming.stateStore.providerClass",
                     "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
+            .config("spark.sql.shuffle.partitions", 12)
             .getOrCreate()
 
-
-        import spark.implicits._
+        import spark.implicits.{localSeqToDatasetHolder, rddToDatasetHolder, StringToColumn, symbolToColumn}
         import io.github.pashashiz.spark_encoders.TypedEncoder.given
 
         // 2. MemoryStream source ---------------------------------------------------
@@ -113,16 +117,14 @@ object StreamingGroupByConsoleDemo {
 
         val users = memSrc.toDS() // Dataset[User] (isStreaming = true)
 
-
-
         // 3. Aggregation (changelog style) ----------------------------------------
         val agg = users
             .groupBy($"location")
-            .agg(F.collect_list($"user_id").as("users"))
+            .agg(collect_list($"user_id").as("users"))
 
         val query = agg.writeStream
             .outputMode(OutputMode.Update) // emit rows that changed this batch
-            .format("console")               // print to stdout
+            .format("console")             // print to stdout
             .option("truncate", value = false) // show full arrays
             .start()
 
@@ -141,26 +143,24 @@ object StreamingGroupByConsoleDemo {
         query.processAllAvailable()
 
         // 6. Stop ------------------------------------------------------------------
-        query.stop()
         spark.stop()
     }
 }
 
-
-
 object StreamingGroupByConsoleDemo2 {
 
     case class User(
-        user_id  : Long, location: String,
+        user_id: Long,
+        location: String,
         timestamp: java.sql.Timestamp = new java.sql.Timestamp(System.currentTimeMillis())
     )
 
     def main(args: Array[String]): Unit = {
 
         Logger.root
-              .clearHandlers()
-              .withHandler(minimumLevel = Some(Level.Error)) // no handler building needed
-              .replace()
+            .clearHandlers()
+            .withHandler(minimumLevel = Some(Level.Error)) // no handler building needed
+            .replace()
 
         // 1. SparkSession ----------------------------------------------------------
         val spark = SparkSession
@@ -178,42 +178,35 @@ object StreamingGroupByConsoleDemo2 {
 
         val users = memSrc.toDS() // Dataset[User] (isStreaming = true)
 
-
-
-
-
-
         // 3. Aggregation (changelog style) ----------------------------------------
         val agg = users
             .withWatermark("timestamp", "100 seconds")
             .groupBy($"location")
-            .agg(F.collect_list($"user_id").as("users"))
+            .agg(collect_list($"user_id").as("users"))
             .select($"location", $"users")
 
         val query = agg
             .writeStream
             .outputMode(OutputMode.Update) // emit rows that changed this batch
-            .format("console")               // print to stdout
+            .format("console")             // print to stdout
             .option("truncate", value = false) // show full arrays
             .start()
 
         // 4. First micro-batch -----------------------------------------------------
         memSrc.addData(
-            User(1, "Paris"),
-            User(2, "Paris"),
-            User(3, "London"),
-            User(4, "Brazzaville"),
-            User(5, "New York")
+          User(1, "Paris"),
+          User(2, "Paris"),
+          User(3, "London"),
+          User(4, "Brazzaville"),
+          User(5, "New York")
         )
         query.processAllAvailable() // block until batch finished
-
 
         // 5. Second micro-batch (user 1 moves to London) --------------------------
         memSrc.addData(User(1, "London"))
         query.processAllAvailable()
 
         // 6. Stop ------------------------------------------------------------------
-        query.stop()
         spark.stop()
     }
 }
