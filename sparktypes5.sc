@@ -1,6 +1,6 @@
 import org.apache.spark.sql.types.*
 import io.github.pashashiz.spark_encoders.TypedEncoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 
 import scala.util.chaining.scalaUtilChainingOps
 
@@ -16,53 +16,71 @@ case class Delete[T](value: T) extends Change[T](value)
 
 TypedEncoder[Person]
     .encoder
-    .schema
-    .printTreeString()
+    .tap {_.schema.printTreeString()}
 
 
 TypedEncoder[Adult]
     .encoder
-    .schema
-    .printTreeString()
+    .tap {_.schema.printTreeString()}
 
 
-TypedEncoder[Change[Person]]
+val personChangeEnc = TypedEncoder[Change[Person]]
     .encoder
-    .schema
-    .printTreeString()
+    .resolveAndBind()
+    .tap {_.schema.printTreeString()}
 
 
-val personChangerSer = TypedEncoder[Change[Person]]
-    .encoder
-    .createSerializer()
-
-val insertAdult = Insert(Adult("John", 30, None))
-
-val personInternalRow = personChangerSer(insertAdult)
-
+val toInternalRow           = personChangeEnc.createSerializer()
+val fromInternalRow         = personChangeEnc.createDeserializer()
+val insertAdult             = Insert(Adult("John", 30, None))
+val personChangeInternalRow = toInternalRow(insertAdult)
+val deserialized            = fromInternalRow(personChangeInternalRow)
 
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.Row
 
-val enc = TypedEncoder[Change[Person]].encoder
-val toScala = CatalystTypeConverters.createToScalaConverter(enc.schema)
-
-// Converts InternalRow -> GenericRowWithSchema (a Row)
-val external: Row = toScala(personInternalRow).asInstanceOf[Row]
-
-println(enc.schema.treeString)
-println(external)
-
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.Encoders
 
-val rowDecoder =
-    ExpressionEncoder(
-        Encoders.row(enc.schema).asInstanceOf[AgnosticEncoder[Row]]
-    )
-    .resolveAndBind().createDeserializer()
 
-val asRow: Row = rowDecoder(personInternalRow)
 
-println(enc.schema.treeString)
-println(asRow)        // prints like a Row, e.g. [Insert,[Adult,30,null,null,John,null]]
+/**
+ * == InternalRow -> GenericRowWithSchema with Internal Catalyst utilities ==
+ *
+ * GenericRowWithSchema is a concrete implementation of '''sql.Row'''
+ * as found in Dataset[Row] = DataFrame
+ *
+ * ''Note: No need to resolve and bind here''
+ *
+ * This is just for exploration purposes, not for production. It is for rapid testing,
+ * for a situation where we want to test encoding and decoding without the full spark machinery
+ *
+ */
+val catalystToExternalRow = CatalystTypeConverters.createToScalaConverter(personChangeEnc.schema)
+val dfRow1                = catalystToExternalRow(personChangeInternalRow).asInstanceOf[Row]
+
+dfRow1 pipe println
+
+
+/**
+ * == InternalRow -> GenericRowWithSchema with User-facing API ==
+ *
+ * GenericRowWithSchema is a concrete implementation of '''sql.Row'''
+ * as found in Dataset[Row] = DataFrame
+ *
+ * This is just for exploration purposes, not for production. It is for rapid testing,
+ * for a situation where we want to test encoding and decoding without the full spark machinery
+ *
+ *
+ * ``RowEncoder.encoderFor(personChangeEnc.schema)`` can always be useful tho
+ *
+ */
+
+val rowEncoderToExternalRow = ExpressionEncoder(RowEncoder.encoderFor(personChangeEnc.schema))
+    .resolveAndBind()
+    .createDeserializer()
+
+val dfRow2 = rowEncoderToExternalRow(personChangeInternalRow)
+
+println(personChangeEnc.schema.treeString)
+println(dfRow2)
+
