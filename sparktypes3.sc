@@ -10,11 +10,16 @@ import io.github.pashashiz.spark_encoders.TypedEncoder.given
  *
  */
 
-StructType(
-    Seq(StructField("a", IntegerType),
-        StructField("b", IntegerType)
+val eltAType =
+    StructType(
+        Seq(
+            StructField("a", IntegerType),
+            StructField("b", IntegerType)
+        )
     )
-).printTreeString()
+
+eltAType.printTreeString()
+
 
 case class A(a: Int, b: Int)
 TypedEncoder[A]
@@ -25,12 +30,15 @@ TypedEncoder[A]
 
 
 
-StructType(
-    List(
-        StructField("a", IntegerType, false),
-        StructField("b", ArrayType(IntegerType, false), false)
+val eltBType =
+    StructType(
+        List(
+            StructField("a", IntegerType, false),
+            StructField("b", ArrayType(IntegerType, false), false)
+        )
     )
-).printTreeString()
+
+eltBType.printTreeString()
 
 case class B(a: Int, b: List[Int])
 TypedEncoder[B]
