@@ -81,6 +81,16 @@ val rowEncoderToExternalRow = ExpressionEncoder(RowEncoder.encoderFor(personChan
 
 val dfRow2 = rowEncoderToExternalRow(personChangeInternalRow)
 
-println(personChangeEnc.schema.treeString)
 println(dfRow2)
 
+/**
+ * == InternalRow -> GenericRowWithSchema with User-facing API no CodeGen ==
+ *
+ * In this example we do the interpreted mode, no code generation -> use eval()
+ *
+ */
+val dfRow3 = ExpressionEncoder(RowEncoder.encoderFor(personChangeEnc.schema))
+    .resolveAndBind()
+    .deserializer.eval(personChangeInternalRow)
+
+println(dfRow3)
