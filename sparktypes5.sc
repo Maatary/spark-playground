@@ -1,5 +1,6 @@
 import org.apache.spark.sql.types.*
 import io.github.pashashiz.spark_encoders.TypedEncoder
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 
 import scala.util.chaining.scalaUtilChainingOps
 
@@ -38,3 +39,30 @@ val personChangerSer = TypedEncoder[Change[Person]]
 val insertAdult = Insert(Adult("John", 30, None))
 
 val personInternalRow = personChangerSer(insertAdult)
+
+
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.Row
+
+val enc = TypedEncoder[Change[Person]].encoder
+val toScala = CatalystTypeConverters.createToScalaConverter(enc.schema)
+
+// Converts InternalRow -> GenericRowWithSchema (a Row)
+val external: Row = toScala(personInternalRow).asInstanceOf[Row]
+
+println(enc.schema.treeString)
+println(external)
+
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.Encoders
+
+val rowDecoder =
+    ExpressionEncoder(
+        Encoders.row(enc.schema).asInstanceOf[AgnosticEncoder[Row]]
+    )
+    .resolveAndBind().createDeserializer()
+
+val asRow: Row = rowDecoder(personInternalRow)
+
+println(enc.schema.treeString)
+println(asRow)        // prints like a Row, e.g. [Insert,[Adult,30,null,null,John,null]]
