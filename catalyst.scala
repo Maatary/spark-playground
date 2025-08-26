@@ -10,7 +10,7 @@ import org.apache.spark.sql.{Dataset, SparkSession}
 
 
 /**
- * # Constant Folding (Catalyst) — quick cheat‑sheet
+ * == Constant Folding (Catalyst) — quick cheat‑sheet ==
  *
  * **What**
  * Catalyst precomputes deterministic, literal‑only sub‑expressions during optimization
