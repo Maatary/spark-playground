@@ -7,11 +7,38 @@ import org.apache.spark.sql.types.*
 import scala.util.chaining.*
 
 
-case class Flight(DEST_COUNTRY_NAME: String, ORIGIN_COUNTRY_NAME: String, count: Int)
+TypedEncoder[Int].encoder
 
-TypedEncoder[Flight]
-  .encoder
-  .schema pipe println
+TypedEncoder[Int]
+    .encoder
+    .schema
+    .printTreeString()
+
+TypedEncoder[Int]
+    .encoder
+    .encoder
+
+TypedEncoder[Int]
+    .encoder
+    .encoder
+    .schema
+    .printTreeString()
+
+
+TypedEncoder[Option[Int]].encoder
+
+TypedEncoder[Option[Int]]
+    .encoder
+    .schema
+    .printTreeString()
+
+TypedEncoder[Option[Int]]
+    .encoder
+
+TypedEncoder[Option[Int]]
+    .encoder
+    .schema.
+    printTreeString()
 
 
 sealed trait Person
@@ -19,22 +46,10 @@ case class Adult(name: String, age: Int, birthday: Option[Int]) extends Person
 case class Child(name: String, age: Int, birthday: Option[Int], guardian: String) extends Person
 case class Senior(name: String, age: Int, birthday: Option[Int], pensionId: String) extends Person
 
-TypedEncoder[Int].encoder.schema
 
-TypedEncoder[Int].encoder.encoder.schema
-
-val optEnc = TypedEncoder[Option[Int]].encoder
-
-optEnc.encoder.schema
-
-optEnc.schema
-
-optEnc.schema.sql
-
-optEnc.schema.printTreeString()
-
-optEnc.schema.prettyJson
-
+/**
+ * == Agnostic Encoder Schema Vs Expression Encoder Schema ==
+ */
 
 val aEnc = TypedEncoder[Adult].encoder
 
@@ -49,6 +64,13 @@ resolvedEnc
     .schema //Agnostic encoder schema
     .printTreeString()
 
+resolvedEnc
+  .encoder
+  .isStruct
+
+resolvedEnc
+  .encoder
+  .lenientSerialization
 "======" pipe println
 
 resolvedEnc
