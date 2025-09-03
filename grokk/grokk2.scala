@@ -40,9 +40,9 @@ def main(): Unit =
           .getOrCreate()
 
 
-    import spark.implicits._
-    //import scala3encoders.given
-    import io.github.pashashiz.spark_encoders.TypedEncoder.*
+    //import spark.implicits._
+
+    //import io.github.pashashiz.spark_encoders.TypedEncoder.*
     import io.github.pashashiz.spark_encoders.TypedEncoder.given
 
     import DataTypes.*
