@@ -7,6 +7,8 @@ import org.apache.spark.sql.streaming.*
 import scribe.*
 import scribe.format.*
 
+import scala.compiletime.uninitialized
+
 object DataTypes {
     case class In(id: String, ts: java.sql.Timestamp, value: Long)
     case class Out(id: String, total: Long)
@@ -66,7 +68,7 @@ def main(): Unit =
 
     /** Keeps a running sum per id */
     class SumProc extends StatefulProcessor[String, In, Out] with Serializable:
-        private var sum: ValueState[Long] = _
+        private var sum: ValueState[Long] = uninitialized
 
         override def init(o: OutputMode, t: TimeMode): Unit =
             sum = getHandle.getValueState[Long]("sum", TTLConfig.NONE)
