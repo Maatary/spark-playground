@@ -36,7 +36,7 @@ class UserByLocationProcessor extends StatefulProcessor[Location, Change[User], 
 
     import io.github.pashashiz.spark_encoders.TypedEncoder.given
 
-    private var users: ValueState[List[User]] = uninitialized
+    @transient private var users: ValueState[List[User]] = uninitialized
 
 
     override def init(outputMode: OutputMode, timeMode: TimeMode): Unit =
