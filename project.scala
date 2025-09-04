@@ -20,7 +20,7 @@
 
 ////> using dep "io.github.vincenzobaz::spark-scala3-encoders:0.2.6,exclude=org.apache.spark%spark-connect-shims_2.13,exclude=org.apache.logging.log4j%log4j-slf4j2-impl,exclude=org.slf4j%slf4j-reload4j,exclude=ch.qos.reload4j%reload4j"
 ////> using dep "io.github.pashashiz::spark-encoders:0.1.0+4-186f80e9-SNAPSHOT,exclude=org.apache.spark%spark-connect-shims_2.13,exclude=org.apache.logging.log4j%log4j-slf4j2-impl,exclude=org.slf4j%slf4j-reload4j,exclude=ch.qos.reload4j%reload4j"
-//> using dep "io.github.pashashiz::spark-encoders:0.1.0+6-16b57f93+20250903-1610-SNAPSHOT,exclude=org.apache.spark%spark-connect-shims_2.13,exclude=org.apache.logging.log4j%log4j-slf4j2-impl,exclude=org.slf4j%slf4j-reload4j,exclude=ch.qos.reload4j%reload4j"
+//> using dep "io.github.pashashiz::spark-encoders:2.0.0,exclude=org.apache.spark%spark-connect-shims_2.13,exclude=org.apache.logging.log4j%log4j-slf4j2-impl,exclude=org.slf4j%slf4j-reload4j,exclude=ch.qos.reload4j%reload4j"
 
 ////> using dep org.apache.hadoop:hadoop-client-api:3.3.6
 //> using dep "org.apache.hadoop:hadoop-client:3.4.1,exclude=org.apache.logging.log4j%log4j-slf4j2-impl,exclude=org.slf4j%slf4j-reload4j,exclude=ch.qos.reload4j%reload4j"
