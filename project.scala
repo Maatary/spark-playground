@@ -23,7 +23,9 @@
 
 //> using dep "org.typelevel::cats-core:2.13.0"
 //> using dep "org.typelevel::cats-effect:3.6.3"
-//> using dep "co.fs2::fs2-core:3.12.1"
+//> using dep "co.fs2::fs2-core:3.12.2"
+//> using dep "co.fs2::fs2-io:3.12.2"
+
 
 
 //> using dep "com.outr::scribe:3.17.0" // Scribe core
