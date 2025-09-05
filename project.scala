@@ -12,7 +12,8 @@
 //> using repository m2Local
 
 
-//> using dep "org.apache.spark:spark-sql_2.13:4.1.0-preview1,exclude=org.apache.spark%spark-connect-shims_2.13,exclude=org.apache.logging.log4j%log4j-slf4j2-impl,exclude=org.slf4j%slf4j-reload4j,exclude=ch.qos.reload4j%reload4j"
+// Align Spark with Delta 4.0.0 (avoid 4.1 preview incompatibilities)
+//> using dep "org.apache.spark:spark-sql_2.13:4.0.1-SNAPSHOT,exclude=org.apache.spark%spark-connect-shims_2.13,exclude=org.apache.logging.log4j%log4j-slf4j2-impl,exclude=org.slf4j%slf4j-reload4j,exclude=ch.qos.reload4j%reload4j"
 //> using dep "io.delta:delta-spark_2.13:4.0.0,exclude=org.apache.logging.log4j%log4j-slf4j2-impl,exclude=org.slf4j%slf4j-reload4j,exclude=ch.qos.reload4j%reload4j"
 //> using dep "io.github.pashashiz::spark-encoders:2.0.0,exclude=org.apache.spark%spark-connect-shims_2.13,exclude=org.apache.logging.log4j%log4j-slf4j2-impl,exclude=org.slf4j%slf4j-reload4j,exclude=ch.qos.reload4j%reload4j"
 
