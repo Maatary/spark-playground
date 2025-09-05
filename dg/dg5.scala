@@ -10,7 +10,7 @@ import cats.effect.unsafe.implicits.global
 import scala.concurrent.duration.*
 import cats.effect.*
 import cats.syntax.all.*
-import fs2.*
+import fs2.Stream
 
 import scribe.*
 import scribe.format.*
