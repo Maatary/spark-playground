@@ -2,6 +2,7 @@
 
 //> using options -Xmax-inlines 128
 //> using options -new-syntax
+//> using options  -Xkind-projector
 ////> using options -explain
 
 
