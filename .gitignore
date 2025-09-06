@@ -42,3 +42,6 @@ build/
 .apdisk
 
 .databricks
+
+#delta table
+/data/delta/*
