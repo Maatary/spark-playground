@@ -8,7 +8,7 @@ import cats.data.Kleisli
 import scala.compiletime.uninitialized
 import io.delta.tables.DeltaTable
 import org.apache.spark.sql.delta.DeltaLog
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Encoder, SparkSession}
 import org.apache.spark.sql.streaming.{OutputMode, StatefulProcessor, TimeMode, TimerValues, ValueState}
 import org.apache.spark.sql.functions.*
 import org.apache.spark.sql.streaming.*
@@ -25,6 +25,14 @@ object Delta1:
         .clearHandlers()
         .withHandler(minimumLevel = Some(Level.Error)) // no handler building needed
         .replace()
+
+    def deleteTableIfExist(tablePath: String): Unit =
+        Stream
+            .eval(Files[IO].deleteRecursively(Path(tablePath)))
+            .handleErrorWith { case _: java.nio.file.NoSuchFileException => Stream.unit }
+            .compile
+            .drain
+            .unsafeRunSync()
 
     def makeSparkSession: SparkSession =
         SparkSession
@@ -44,6 +52,10 @@ object Delta1:
         import spark.implicits.{localSeqToDatasetHolder, rddToDatasetHolder, StringToColumn, symbolToColumn}
         import _root_.io.github.pashashiz.spark_encoders.TypedEncoder.given
 
+        val tablePath = "data/delta/delta1"
+
+        deleteTableIfExist(tablePath)
+
         spark
             .range(3)
             .coalesce(1)
@@ -51,9 +63,9 @@ object Delta1:
             .write
             .format("delta")
             .mode("overwrite")
-            .save("data/delta/delta1")
+            .save(tablePath)
 
-        val deltaTable = DeltaTable.forPath(spark, "data/delta/delta1")
+        val deltaTable = DeltaTable.forPath(spark, tablePath)
         deltaTable
             .delete($"id" === 1)
 
@@ -70,6 +82,14 @@ object Delta2:
         .clearHandlers()
         .withHandler(minimumLevel = Some(Level.Error)) // no handler building needed
         .replace()
+
+    def deleteTableIfExist(tablePath: String): Unit =
+        Stream
+            .eval(Files[IO].deleteRecursively(Path(tablePath)))
+            .handleErrorWith { case _: java.nio.file.NoSuchFileException => Stream.unit }
+            .compile
+            .drain
+            .unsafeRunSync()
 
     def makeSparkSession: SparkSession =
         SparkSession
@@ -92,12 +112,7 @@ object Delta2:
 
         val tablePath = "data/delta/delta2"
 
-        Stream
-            .eval(Files[IO].deleteRecursively(Path(tablePath)))
-            .handleErrorWith { case _: java.nio.file.NoSuchFileException => Stream.unit }
-            .compile
-            .drain
-            .unsafeRunSync()
+        deleteTableIfExist(tablePath)
 
         spark
             .range(4)
@@ -110,16 +125,23 @@ object Delta2:
             .save(tablePath)
 
         val deltaTable = DeltaTable
-            .forPath(spark, "data/delta/delta2")
+            .forPath(spark, tablePath)
             .tap { _.delete("id = 1") }
-            .tap { _.update($"id" % 2 === 0, Map("id" -> lit(8))) }
+            .tap {
+                _.update($"id" % 2 === 0, Map("id" -> lit(8), "name" -> lit("Updated")))
+            }
 
+        // Introduced solely to look into the checkpoint quickly
+        // Delta checkpoint automatically when the checkpoint interval is reached default is 10 commit
         val log = DeltaLog.forTable(spark, tablePath)
         log.checkpoint(log.update())
 
         deltaTable
-            .tap {_.update($"id" === 3, Map("id" -> lit(6)))}
+            .tap {
+                _.update($"id" === 3, Map("id" -> lit(6), "name" -> lit("Modified")))
+            }
 
+        // table features
         deltaTable
             .detail()
             .select($"tableFeatures")
@@ -130,7 +152,7 @@ object Delta2:
             .read
             .format("delta")
             .option("readChangeData", "true")
-            .option("startingVersion", "0")
+            .option("startingVersion", "0") // <- In batch mode, we need to specify the starting version
             .load("data/delta/delta2")
             .select(struct($"id").as("entity"), $"_change_type", $"_commit_version", $"_commit_timestamp")
             .withColumn("orderHint", when($"_change_type".isin("delete", "update_preimage"), lit(0)).otherwise(lit(1)))
@@ -139,5 +161,160 @@ object Delta2:
             .tap { _.printSchema() }
             .tap { _.explain(true) }
             .show(false)
+
+        val cp = spark
+            .read
+            .parquet("data/delta/delta2/_delta_log/00000000000000000002.checkpoint.parquet")
+            .tap { _.printSchema() }
+            .tap { _.show(true) }
+            .write
+            .json("data/delta/delta2/_delta_log/00000000000000000002.checkpoint.json")
+
+        spark.stop()
+
+
+
+object Delta3:
+
+
+    case class User(id: Long, name: String)
+    case class RawChange[T](entity: T, changeType: String, commitVersion: Long, commitTimestamp: java.sql.Timestamp)
+
+    Logger.root
+        .clearHandlers()
+        .withHandler(minimumLevel = Some(Level.Error)) // no handler building needed
+        .replace()
+
+
+    def createDelta3Table(spark: SparkSession, absPath: String): Unit = {
+        DeltaTable.create(spark)
+                  .location(absPath)
+                  .addColumn("id", "BIGINT", false) // nullable = false
+                  .addColumn("name", "STRING", false) // nullable = false
+                  .property("delta.enableChangeDataFeed", "true")
+                  .execute()
+    }
+
+    def createDeltaTableFrom[T](spark: SparkSession, path: String, enableCDF: Boolean = true)
+        (using encT: Encoder[T]): Unit = {
+        import java.nio.file.Paths
+        import org.apache.spark.sql.types._
+
+
+        // Build SQL type strings for all Spark data types (works for nested types too)
+        def sqlType(dt: DataType): String = dt.sql // e.g., BIGINT, STRING, STRUCT<...>, ARRAY<...>
+
+        val b0 = DeltaTable.create(spark).location(path) // <-- must be an absolute path otherwise interpreted as a table name
+        val b1 = encT.schema.fields.foldLeft(b0) { (b, f) =>
+            b.addColumn(f.name, sqlType(f.dataType), f.nullable)
+        }
+
+        val b2 = if (enableCDF) then b1.property("delta.enableChangeDataFeed", "true") else b1
+        b2.execute()
+    }
+
+    def entityStructFor[T](name: String = "entity")(using enc: Encoder[T]): Column =
+        struct(enc.schema.fieldNames.map(col): _*).as(name)
+
+    def createUnsafeRawChangeDS[T](cdfDF: DataFrame)(using entityEnc: Encoder[T], rawChangeEnc: Encoder[RawChange[T]]): Dataset[RawChange[T]] = {
+        cdfDF.select(
+          entityStructFor[T]("entity"),
+          col("_change_type").as("changeType"),
+          col("_commit_version").as("commitVersion"),
+          col("_commit_timestamp").as("commitTimestamp")
+        )
+        .as[RawChange[T]]
+    }
+
+    def deleteTableIfExist(tablePath: String): Unit =
+        Stream
+            .eval(Files[IO].deleteRecursively(Path(tablePath)))
+            .handleErrorWith { case _: java.nio.file.NoSuchFileException => Stream.unit }
+            .compile
+            .drain
+            .unsafeRunSync()
+
+    def makeSparkSession: SparkSession =
+        SparkSession
+            .builder()
+            .appName("delta Application")
+            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+            .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+            .config("spark.sql.streaming.stateStore.providerClass", "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
+            .config("spark.sql.shuffle.partitions", 12)
+            .master("local[*]")
+            .getOrCreate()
+
+    def main(args: Array[String]): Unit =
+
+        val spark = makeSparkSession
+
+        import spark.implicits.{localSeqToDatasetHolder, rddToDatasetHolder, StringToColumn, symbolToColumn}
+        import io.github.pashashiz.spark_encoders.TypedEncoder.given
+        import org.apache.spark.sql.delta.DeltaLog
+
+        val tablePath = "data/delta/delta3"
+
+        deleteTableIfExist(tablePath)
+
+        createDeltaTableFrom[User](spark, Path(tablePath).absolute.toString, true)
+        //createDelta3Table(spark, "file:/Users/maatari/Dev/IdeaProjects/spark-playground/data/delta/delta3")
+
+        Seq(User(1, "Alice"), User(2, "Bob"), User(3, "Charlie"), User(4, "Dave"))
+            .toDS
+            .tap { _.toDF.printSchema()}
+            .coalesce(1)
+            .tap { _.printSchema() }
+            .tap { _.explain(true) }
+            .write
+            .format("delta")
+            .option("delta.enableChangeDataFeed", "true")
+            .mode("overwrite")
+            .save(tablePath)
+
+        val deltaTable = DeltaTable
+            .forPath(spark, tablePath)
+            .tap { _.delete("id = 1") }
+            .tap { _.update($"id" % 2 === 0, Map("name" -> concat(lit("Dr. "), col("name")))) }
+
+        deltaTable
+            .tap { _.update($"id" === 3, Map("name" -> concat(lit("Mr. "), col("name")))) }
+
+        val log = DeltaLog.forTable(spark, tablePath)
+        log.checkpoint(log.update())
+
+        // table features
+        deltaTable
+            .detail()
+            .select($"tableFeatures")
+            .show(false)
+
+        // Read and print the change feed
+        val cdfDF = spark
+            .read
+            .format("delta")
+            .option("readChangeData", "true")
+            .option("startingVersion", "0") // <- In batch mode, we need to specify the starting version
+            .load(tablePath)
+            .tap { _.printSchema() }
+
+
+        val rawChangesDS = createUnsafeRawChangeDS[User](cdfDF) //<-- Exploring the pattern
+            //.select(entityStructFor[User]("entity"), $"_change_type", $"_commit_version", $"_commit_timestamp")
+            .withColumn("orderHint", when($"changeType".isin("delete", "update_preimage"), lit(0)).otherwise(lit(1)))
+            .orderBy($"commitVersion".asc, $"orderHint".asc)
+            .drop("orderHint")
+            .tap { _.printSchema() }
+            .tap { _.explain(true) }
+            .show(false)
+
+        // 03 checkpoint because we did 3 update
+        val cp = spark
+            .read
+            .parquet(s"$tablePath/_delta_log/00000000000000000004.checkpoint.parquet")
+            .tap { _.printSchema() }
+            .tap { _.show(true) }
+            .write
+            .json(s"$tablePath/_delta_log/00000000000000000004.checkpoint.json")
 
         spark.stop()
