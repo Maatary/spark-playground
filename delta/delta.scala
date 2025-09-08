@@ -7,6 +7,8 @@ import cats.data.Kleisli
 
 import scala.compiletime.uninitialized
 import io.delta.tables.DeltaTable
+import io.github.pashashiz.spark_encoders.TypedEncoder
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders
 import org.apache.spark.sql.delta.DeltaLog
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Encoder, SparkSession}
 import org.apache.spark.sql.streaming.{OutputMode, StatefulProcessor, TimeMode, TimerValues, ValueState}
@@ -186,20 +188,8 @@ object Delta3:
         .replace()
 
 
-    def createDelta3Table(spark: SparkSession, absPath: String): Unit = {
-        DeltaTable.create(spark)
-                  .location(absPath)
-                  .addColumn("id", "BIGINT", false) // nullable = false
-                  .addColumn("name", "STRING", false) // nullable = false
-                  .property("delta.enableChangeDataFeed", "true")
-                  .execute()
-    }
-
-    def createDeltaTableFrom[T](spark: SparkSession, path: String, enableCDF: Boolean = true)
-        (using encT: Encoder[T]): Unit = {
-        import java.nio.file.Paths
+    def createDeltaTableFor[T](spark: SparkSession, path: String, enableCDF: Boolean = true)(using encT: Encoder[T]): Unit = {
         import org.apache.spark.sql.types._
-
 
         // Build SQL type strings for all Spark data types (works for nested types too)
         def sqlType(dt: DataType): String = dt.sql // e.g., BIGINT, STRING, STRUCT<...>, ARRAY<...>
@@ -257,9 +247,10 @@ object Delta3:
 
         deleteTableIfExist(tablePath)
 
-        createDeltaTableFrom[User](spark, Path(tablePath).absolute.toString, true)
+        createDeltaTableFor[User](spark, Path(tablePath).absolute.toString, true)
         //createDelta3Table(spark, "file:/Users/maatari/Dev/IdeaProjects/spark-playground/data/delta/delta3")
 
+        //creation
         Seq(User(1, "Alice"), User(2, "Bob"), User(3, "Charlie"), User(4, "Dave"))
             .toDS
             .tap { _.toDF.printSchema()}
@@ -272,11 +263,13 @@ object Delta3:
             .mode("overwrite")
             .save(tablePath)
 
+        //update 1
         val deltaTable = DeltaTable
             .forPath(spark, tablePath)
             .tap { _.delete("id = 1") }
             .tap { _.update($"id" % 2 === 0, Map("name" -> concat(lit("Dr. "), col("name")))) }
 
+        //update 2
         deltaTable
             .tap { _.update($"id" === 3, Map("name" -> concat(lit("Mr. "), col("name")))) }
 
@@ -297,6 +290,11 @@ object Delta3:
             .option("startingVersion", "0") // <- In batch mode, we need to specify the starting version
             .load(tablePath)
             .tap { _.printSchema() }
+
+        println("==== Encoder schema for RawChange[User] ====")
+        TypedEncoder[RawChange[User]].encoder.schema.printTreeString()
+        TypedEncoder[RawChange[User]].encoder.encoder.schema.printTreeString()
+        println("============================================")
 
 
         val rawChangesDS = createUnsafeRawChangeDS[User](cdfDF) //<-- Exploring the pattern

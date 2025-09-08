@@ -50,3 +50,69 @@ TypedEncoder[ID]
     .encoder
     .schema
     .printTreeString()
+
+"=========== User Change" pipe println
+
+case class User(id: Long, name: String)
+case class RawChange[T](
+    entity: T,
+    changeType: String,
+    commitVersion: Long,
+    commitTimestamp: java.sql.Timestamp
+)
+
+val enc = TypedEncoder[RawChange[User]]
+
+val resolvedEnc = enc.encoder.resolveAndBind()
+
+"====== Encoder & Schema" pipe println
+
+resolvedEnc
+    .schema //serializer schema
+    .printTreeString()
+
+resolvedEnc
+    .encoder
+    .schema //Agnostic encoder schema
+    .printTreeString()
+
+resolvedEnc
+    .encoder
+    .isStruct
+
+resolvedEnc
+    .encoder
+    .lenientSerialization
+
+"====== Deserializer" pipe println
+
+resolvedEnc
+    .deserializer
+    .dataType
+
+resolvedEnc
+    .deserializer
+    .numberedTreeString
+
+resolvedEnc
+    .deserializer
+    .treeString
+
+"====== Serializer" pipe println
+
+resolvedEnc
+    .serializer
+    .foreach(e => println(e.dataType))
+
+
+resolvedEnc
+    .serializer
+    .foreach(e => println(e.numberedTreeString))
+
+resolvedEnc
+    .serializer
+    .foreach(e => println(e.treeString))
+
+
+
+
