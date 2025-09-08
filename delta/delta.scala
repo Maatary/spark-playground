@@ -398,7 +398,7 @@ object Delta4:
         import io.github.pashashiz.spark_encoders.TypedEncoder.given
         import org.apache.spark.sql.delta.DeltaLog
 
-        val tablePath = "data/delta/delta3"
+        val tablePath = "data/delta/delta4"
 
         deleteTableIfExist(tablePath)
 
@@ -427,13 +427,17 @@ object Delta4:
         deltaTable
             .as("target")
             .merge(
-                Seq(User(2, "Dr. Bob"), User(4, "Dr. Dave")).toDF.as("source"),
+                Seq(User(2, "Dr. Bob"),
+                    User(4, "Dr. Dave"),
+                    User(5, "Dr. Davis max")).toDF.as("source"),
                 $"target.id" === $"source.id")
             .whenMatched()
             .updateAll()
+            .whenNotMatched()
+            .insertAll()
             .execute()
 
-        //commit 3
+        //commit 4
         deltaTable
             .as("target")
             .merge(
