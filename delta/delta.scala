@@ -191,7 +191,7 @@ object Delta3:
     def createDeltaTableFor[T](spark: SparkSession, path: String, enableCDF: Boolean = true)(using encT: Encoder[T]): Unit = {
         import org.apache.spark.sql.types._
 
-        // Build SQL type strings for all Spark data types (works for nested types too)
+        // Build SQL type strings for all Spark data types (works for nested types too) including constraints e.g., NOT NULL
         def sqlType(dt: DataType): String = dt.sql // e.g., BIGINT, STRING, STRUCT<...>, ARRAY<...>
 
         val b0 = DeltaTable.create(spark).location(path) // <-- must be an absolute path otherwise interpreted as a table name
@@ -206,7 +206,7 @@ object Delta3:
     def entityStructFor[T](name: String = "entity")(using enc: Encoder[T]): Column =
         struct(enc.schema.fieldNames.map(col): _*).as(name)
 
-    def createUnsafeRawChangeDS[T](cdfDF: DataFrame)(using entityEnc: Encoder[T], rawChangeEnc: Encoder[RawChange[T]]): Dataset[RawChange[T]] = {
+    def createUnsafeRawChangeDSFor[T](cdfDF: DataFrame)(using entityEnc: Encoder[T], rawChangeEnc: Encoder[RawChange[T]]): Dataset[RawChange[T]] = {
         cdfDF.select(
           entityStructFor[T]("entity"),
           col("_change_type").as("changeType"),
@@ -247,10 +247,10 @@ object Delta3:
 
         deleteTableIfExist(tablePath)
 
+        //commit 0
         createDeltaTableFor[User](spark, Path(tablePath).absolute.toString, true)
-        //createDelta3Table(spark, "file:/Users/maatari/Dev/IdeaProjects/spark-playground/data/delta/delta3")
 
-        //creation
+        //commit 1
         Seq(User(1, "Alice"), User(2, "Bob"), User(3, "Charlie"), User(4, "Dave"))
             .toDS
             .tap { _.toDF.printSchema()}
@@ -263,13 +263,13 @@ object Delta3:
             .mode("overwrite")
             .save(tablePath)
 
-        //update 1
+        //commit 2
         val deltaTable = DeltaTable
             .forPath(spark, tablePath)
             .tap { _.delete("id = 1") }
             .tap { _.update($"id" % 2 === 0, Map("name" -> concat(lit("Dr. "), col("name")))) }
 
-        //update 2
+        //commit 3
         deltaTable
             .tap { _.update($"id" === 3, Map("name" -> concat(lit("Mr. "), col("name")))) }
 
@@ -282,7 +282,7 @@ object Delta3:
             .select($"tableFeatures")
             .show(false)
 
-        // Read and print the change feed
+        // Read the change feed
         val cdfDF = spark
             .read
             .format("delta")
@@ -297,7 +297,7 @@ object Delta3:
         println("============================================")
 
 
-        val rawChangesDS = createUnsafeRawChangeDS[User](cdfDF) //<-- Exploring the pattern
+        val rawChangesDS = createUnsafeRawChangeDSFor[User](cdfDF) //<-- Exploring the pattern
             //.select(entityStructFor[User]("entity"), $"_change_type", $"_commit_version", $"_commit_timestamp")
             .withColumn("orderHint", when($"changeType".isin("delete", "update_preimage"), lit(0)).otherwise(lit(1)))
             .orderBy($"commitVersion".asc, $"orderHint".asc)
@@ -306,7 +306,7 @@ object Delta3:
             .tap { _.explain(true) }
             .show(false)
 
-        // 03 checkpoint because we did 3 update
+        // 04 checkpoint because we did 4 commits with table creation being commit 0
         val cp = spark
             .read
             .parquet(s"$tablePath/_delta_log/00000000000000000004.checkpoint.parquet")
