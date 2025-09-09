@@ -151,7 +151,7 @@ object Delta2:
         spark
             .read
             .format("delta")
-            .option("readChangeData", "true")
+            .option("readChangeFeed", "true")
             .option("startingVersion", "0") // <- In batch mode, we need to specify the starting version
             .load("data/delta/delta2")
             .select(struct($"id").as("entity"), $"_change_type", $"_commit_version", $"_commit_timestamp")
@@ -283,7 +283,7 @@ object Delta3:
         val cdfDF = spark
             .read
             .format("delta")
-            .option("readChangeData", "true")
+            .option("readChangeFeed", "true")
             .option("startingVersion", "0") // <- In batch mode, we need to specify the starting version
             .load(tablePath)
             .tap { _.printSchema() }
@@ -332,7 +332,7 @@ object Delta4:
         spark
             .read
             .format("delta")
-            .option("readChangeData", "true")
+            .option("readChangeFeed", "true")
             .option("startingVersion", "0") // <- In batch mode, we need to specify the starting version
             .load(tablePath)
 
@@ -456,5 +456,157 @@ object Delta4:
             .tap  { _.printSchema() }
             .tap  { _.show(false) }
 
+
+        spark.stop()
+
+
+
+
+object Delta5:
+
+
+    case class User(id: Long, name: String)
+    case class RawChange[T](entity: T, changeType: String, commitVersion: Long, commitTimestamp: java.sql.Timestamp)
+
+    Logger.root
+        .clearHandlers()
+        .withHandler(minimumLevel = Some(Level.Error)) // no handler building needed
+        .replace()
+
+    def createCdfDF(spark: SparkSession, tablePath: String, maxFilesPerTrigger: Int ): DataFrame =
+        spark
+            .readStream
+            .format("delta")
+            .option("readChangeFeed", "true")
+            .option("startingVersion", "0")
+            .option("maxFilesPerTrigger", maxFilesPerTrigger)
+            .load(tablePath)
+
+    def createDeltaTableFor[T](spark: SparkSession, path: String, enableCDF: Boolean = true)(using encT: Encoder[T]): Unit = {
+        import org.apache.spark.sql.types._
+
+        // Build SQL type strings for all Spark data types (works for nested types too) including constraints e.g., NOT NULL
+        def sqlType(dt: DataType): String = dt.sql // e.g., BIGINT, STRING, STRUCT<...>, ARRAY<...>
+
+        val b0 = DeltaTable.create(spark).location(path) // <-- must be an absolute path otherwise interpreted as a table name
+        val b1 = encT.schema.fields.foldLeft(b0) { (b, f) =>
+            b.addColumn(f.name, sqlType(f.dataType), f.nullable)
+        }
+
+        val b2 = if enableCDF then b1.property("delta.enableChangeDataFeed", "true") else b1
+        b2.execute()
+    }
+
+    def entityStructFor[T](name: String = "entity")(using enc: Encoder[T]): Column =
+        struct(enc.schema.fieldNames.map(col)*).as(name)
+
+    def createUnsafeRawChangeDSFor[T](cdfDF: DataFrame)(using entityEnc: Encoder[T], rawChangeEnc: Encoder[RawChange[T]]): Dataset[RawChange[T]] = {
+        cdfDF.select(
+          entityStructFor[T]("entity"),
+          col("_change_type").as("changeType"),
+          col("_commit_version").as("commitVersion"),
+          col("_commit_timestamp").as("commitTimestamp")
+        )
+        .as[RawChange[T]]
+    }
+
+    def computeSortedRawChangeDSFor[T](rawDS: Dataset[RawChange[T]])(using rawChangeEnc: Encoder[RawChange[T]]): Dataset[RawChange[T]] =
+        rawDS
+            .withColumn("orderHint", when(col("changeType").isin("delete", "update_preimage"), lit(0)).otherwise(lit(1)))
+            .orderBy(col("commitVersion").asc, col("orderHint").asc)
+            .drop("orderHint")
+            .as[RawChange[T]]
+
+    def deleteTableIfExist(tablePath: String): Unit =
+        Stream
+            .eval(Files[IO].deleteRecursively(Path(tablePath)))
+            .handleErrorWith { case _: java.nio.file.NoSuchFileException => Stream.unit }
+            .compile
+            .drain
+            .unsafeRunSync()
+
+    def makeSparkSession: SparkSession =
+        SparkSession
+            .builder()
+            .appName("delta Application")
+            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+            .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+            .config("spark.sql.streaming.stateStore.providerClass", "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
+            .config("spark.sql.shuffle.partitions", 12)
+            .master("local[*]")
+            .getOrCreate()
+
+    def main(args: Array[String]): Unit =
+
+        val spark = makeSparkSession
+
+        import spark.implicits.{localSeqToDatasetHolder, rddToDatasetHolder, StringToColumn, symbolToColumn}
+        import io.github.pashashiz.spark_encoders.TypedEncoder.given
+        import org.apache.spark.sql.delta.DeltaLog
+
+        val tablePath = "data/delta/delta5"
+
+        deleteTableIfExist(tablePath)
+
+        //commit 0
+        createDeltaTableFor[User](spark, Path(tablePath).absolute.toString, true)
+
+        //commit 1
+        Seq(User(1, "Alice"), User(2, "Bob"), User(3, "Charlie"), User(4, "Dave"))
+            .toDS
+            .coalesce(1)
+            .tap { _.printSchema() }
+            .tap { _.explain(true) }
+            .write
+            .format("delta")
+            .option("delta.enableChangeDataFeed", "true")
+            .mode("overwrite")
+            .save(tablePath)
+
+
+        val deltaTable = DeltaTable.forPath(spark, tablePath)
+
+        //commit 2
+        deltaTable.delete($"id" === 1)
+
+        //commit 3
+        deltaTable
+            .as("target")
+            .merge(
+                Seq(User(2, "Dr. Bob"),
+                    User(4, "Dr. Dave"),
+                    User(5, "Dr. Davis")).toDF.as("source"),
+                $"target.id" === $"source.id")
+            .whenMatched()
+            .updateAll()
+            .whenNotMatched()
+            .insertAll()
+            .execute()
+
+        //commit 4
+        deltaTable
+            .as("target")
+            .merge(
+                Seq(User(3, "Mr. Charlie"),
+                    User(4, "Super Dr. Dave")).toDF.as("source"),
+                $"target.id" === $"source.id"
+            )
+            .whenMatched()
+            .updateAll()
+            .execute()
+
+
+        createCdfDF(spark, tablePath, maxFilesPerTrigger = 2)
+            .tap  { _.printSchema() }
+            .pipe { cdfDF => createUnsafeRawChangeDSFor[User](cdfDF) }
+            .tap  { _.printSchema() }
+            .writeStream
+            .foreachBatch { (ds:Dataset[RawChange[User]], l:Long) =>
+                computeSortedRawChangeDSFor[User](ds)
+                    .show(false)
+            }
+            .trigger(Trigger.AvailableNow)
+            .start()
+            .awaitTermination()
 
         spark.stop()
