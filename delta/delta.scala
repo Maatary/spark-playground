@@ -5,8 +5,9 @@ import fs2.Stream
 import cats.syntax.all.*
 
 import scala.compiletime.uninitialized
-import io.delta.tables.DeltaTable
+
 import io.github.pashashiz.spark_encoders.TypedEncoder
+import io.delta.tables.DeltaTable
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Encoder, SparkSession}
 import org.apache.spark.sql.functions.*
 import org.apache.spark.sql.streaming.*
@@ -844,7 +845,6 @@ object Delta7:
           .start()
     }
 
-
     def createDSFromMemSrcFor[T](memSrc: MemoryStream[T], partition: Int): Dataset[T] =
         memSrc.toDS()
 
@@ -978,6 +978,214 @@ object Delta7:
             .pipe { cdfDF => createUnsafeRawChangeDSFor[User](cdfDF) }
 
         val rawChangeQuery = runShowRawChangeDSFor[User](userRawChangeDS, Trigger.AvailableNow)
+
+        rawChangeQuery.awaitTermination()
+
+        spark.stop()
+
+
+
+object Delta8:
+
+
+    case class User(id: Long, name: Option[String])
+    case class RawChange[T](entity: T, changeType: String, commitVersion: Long, commitTimestamp: java.sql.Timestamp)
+
+    sealed abstract class Change[+T](val entity: T, val version: Long)
+    case class Add[T](override val entity: T, override val version: Long) extends Change[T](entity, version)
+    case class Remove[T](override val entity: T, override val version: Long) extends Change[T](entity, version)
+
+    Logger.root
+        .clearHandlers()
+        .withHandler(minimumLevel = Some(Level.Error)) // no handler building needed
+        .replace()
+
+    def computeSortedUserChangeDS(changes: Dataset[Change[User]])(using Encoder[Change[User]]): Dataset[Change[User]] =
+        changes
+          .toDF
+          .withColumn("orderHint", when(col("_type") === lit("Remove"), lit(0)).otherwise(lit(1)))
+          .orderBy(col("version").asc, col("orderHint").asc)
+          .drop("orderHint")
+          .as[Change[User]]
+
+    def runShowUserChangeDS(userChangeDS: Dataset[Change[User]], trigger: Trigger)(using Encoder[Change[User]]): StreamingQuery =
+        userChangeDS
+          .writeStream
+          .foreachBatch { (ds: Dataset[Change[User]], _: Long) =>
+              computeSortedUserChangeDS(ds).show(false)
+          }
+          .trigger(trigger)
+          .start()
+
+    def runUpsertUserDSIntoDelta(deltaTable: DeltaTable, userDS: Dataset[User]): StreamingQuery = {
+
+        val allOtherNull = userDS
+          .columns
+          .filterNot(_ == "id")
+          .map(colName => col("source." + colName).isNull)
+          .reduce(_ && _)
+
+        userDS
+          .writeStream
+          .foreachBatch { (ds: Dataset[User], batchId: Long) =>
+              deltaTable
+                .as("target")
+                .merge(
+                  ds.toDF.as("source"),
+                  col("target.id") === col("source.id")
+                )
+                .whenMatched(allOtherNull)
+                .delete()
+                .whenMatched()
+                .updateAll()
+                .whenNotMatched(!allOtherNull) // <-- We don't insert tombstone.
+                .insertAll()
+                .execute()
+                .pipe { _ => () }
+          }
+          .start()
+    }
+
+    def createDSFromMemSrcFor[T](memSrc: MemoryStream[T], partition: Int): Dataset[T] =
+        memSrc.toDS()
+
+    def createCdfDF(spark: SparkSession, tablePath: String, maxFilesPerTrigger: Int ): DataFrame =
+        spark
+            .readStream
+            .format("delta")
+            .option("readChangeFeed", "true")
+            .option("startingVersion", "0")
+            .option("maxFilesPerTrigger", maxFilesPerTrigger)
+            .load(tablePath)
+            .tap { _.printSchema() }
+
+    def createDeltaTableFor[T](spark: SparkSession, path: String, enableCDF: Boolean = true)(using encT: Encoder[T]): Unit = {
+        import org.apache.spark.sql.types._
+
+        // Build SQL type strings for all Spark data types (works for nested types too) including constraints e.g., NOT NULL
+        def sqlType(dt: DataType): String = dt.sql // e.g., BIGINT, STRING, STRUCT<...>, ARRAY<...>
+
+        val b0 = DeltaTable.create(spark).location(path) // <-- must be an absolute path otherwise interpreted as a table name
+        val b1 = encT.schema.fields.foldLeft(b0) { (b, f) =>
+            b.addColumn(f.name, sqlType(f.dataType), f.nullable)
+        }
+
+        val b2 = if enableCDF then b1.property("delta.enableChangeDataFeed", "true") else b1
+        b2.execute()
+    }
+
+    def entityStructFor[T](name: String = "entity")(using enc: Encoder[T]): Column =
+        struct(enc.schema.fieldNames.map(col)*).as(name)
+
+    def createUnsafeRawChangeDSFor[T](cdfDF: DataFrame)(using entityEnc: Encoder[T], rawChangeEnc: Encoder[RawChange[T]]): Dataset[RawChange[T]] = {
+        cdfDF.select(
+          entityStructFor[T]("entity"),
+          col("_change_type").as("changeType"),
+          col("_commit_version").as("commitVersion"),
+          col("_commit_timestamp").as("commitTimestamp")
+        )
+        .as[RawChange[T]]
+        .tap { _.printSchema() }
+
+    }
+
+    def computeSortedRawChangeDSFor[T](rawDS: Dataset[RawChange[T]])(using rawChangeEnc: Encoder[RawChange[T]]): Dataset[RawChange[T]] =
+        rawDS
+            .withColumn("orderHint", when(col("changeType").isin("delete", "update_preimage"), lit(0)).otherwise(lit(1)))
+            .orderBy(col("commitVersion").asc, col("orderHint").asc)
+            .drop("orderHint")
+            .as[RawChange[T]]
+
+    def computeChangeDSFor[T](raw: Dataset[RawChange[T]])(using Encoder[Change[T]]): Dataset[Change[T]] =
+        raw.map { rc =>
+            rc.changeType match
+                case "insert" | "update_postimage" => Add(rc.entity, rc.commitVersion)
+                case "delete" | "update_preimage"  => Remove(rc.entity, rc.commitVersion)
+        }
+
+    def deleteTableIfExist(tablePath: String): Unit =
+        Stream
+            .eval(Files[IO].deleteRecursively(Path(tablePath)))
+            .handleErrorWith { case _: java.nio.file.NoSuchFileException => Stream.unit }
+            .compile
+            .drain
+            .unsafeRunSync()
+
+    def makeSparkSession: SparkSession =
+        SparkSession
+            .builder()
+            .appName("delta Application")
+            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+            .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+            .config("spark.sql.streaming.stateStore.providerClass", "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
+            .config("spark.sql.shuffle.partitions", 12)
+            .master("local[*]")
+            .getOrCreate()
+
+    def main(args: Array[String]): Unit =
+
+        implicit val spark  = makeSparkSession
+        implicit val sqlCtx = spark.sqlContext
+
+        import spark.implicits.{localSeqToDatasetHolder, rddToDatasetHolder, StringToColumn, symbolToColumn}
+        import io.github.pashashiz.spark_encoders.TypedEncoder.given
+
+
+
+        val tablePath = "data/delta/delta8"
+
+
+        deleteTableIfExist(tablePath)
+
+        //commit 0
+        createDeltaTableFor[User](spark, Path(tablePath).absolute.toString, true)
+
+        val deltaTable  = DeltaTable.forPath(spark, tablePath)
+        val memSrc      = MemoryStream[User]
+        val userDS      = createDSFromMemSrcFor[User](memSrc, partition = 1)
+
+        val userDSInToDeltaQuery = runUpsertUserDSIntoDelta(deltaTable, userDS)
+
+        //commit 1
+        memSrc.addData(Seq(
+            User(1, Some("Alice")),
+            User(2, Some("Bob")),
+            User(3, Some("Charlie")),
+            User(4, Some("Dave"))
+        ))
+        userDSInToDeltaQuery.processAllAvailable()
+
+        //commit 2
+        memSrc.addData(Seq(
+            User(2, Some("Dr. Bob")),
+            User(4, Some("Dr. Dave")),
+            User(5, Some("Dr. Davis"))
+        ))
+        userDSInToDeltaQuery.processAllAvailable()
+
+
+        //commit 3
+         memSrc.addData(Seq(
+             User(3, Some("Mr. Charlie")),
+             User(4, Some("Super Dr. Dave"))
+         ))
+        userDSInToDeltaQuery.processAllAvailable()
+
+
+        //commit 4
+        memSrc.addData(Seq(
+            User(5, None),
+            User(3, Some("Super Mr. Charlie")),
+        ))
+        userDSInToDeltaQuery.processAllAvailable()
+
+
+
+        val userChangeDS: Dataset[Change[User]] = createCdfDF(spark, tablePath, maxFilesPerTrigger = 2)
+          .pipe { cdfDF       => createUnsafeRawChangeDSFor[User](cdfDF) }
+          .pipe { rawChangeDS => computeChangeDSFor[User](rawChangeDS)}
+
+        val rawChangeQuery = runShowUserChangeDS(userChangeDS, Trigger.AvailableNow)
 
         rawChangeQuery.awaitTermination()
 
