@@ -836,7 +836,7 @@ object Delta7:
                 .delete()
                 .whenMatched()
                 .updateAll()
-                .whenNotMatched()
+                .whenNotMatched(!allOtherNull) // <-- We don't insert tombstone.
                 .insertAll()
                 .execute()
                 .pipe { _ => () }

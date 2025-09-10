@@ -1,4 +1,4 @@
-package tws1
+package tws2
 
 import scala.compiletime.uninitialized
 import org.apache.spark.sql.SparkSession
@@ -51,29 +51,29 @@ class UserByLocationProcessor extends StatefulProcessor[Location, Change[User], 
     ): Iterator[UserByLocationAggregate] =
 
 
-       val inputRowsList = inputRows.toList
+        val inputRowsList = inputRows.toList
 
-       val current       = if users.exists() then users.get() else List.empty[User]
+        val current       = if users.exists() then users.get() else List.empty[User]
 
-       // Order by commit version, and within a version apply Remove before Add
-       val ordered       = inputRowsList.sortBy {
-         case Remove(_, v) => (v, 0)
-         case Add(_, v)    => (v, 1)
-       }
-
-        val next = ordered.foldLeft(current) {
-          case (acc, Remove(u, _)) => acc.filterNot(_.id == u.id)
-          case (acc, Add(u, _))    => acc.filterNot(_.id == u.id) :+ u
+        // Order by commit version, and within a version apply Remove before Add
+        val ordered       = inputRowsList.sortBy {
+            case Remove(_, v) => (v, 0)
+            case Add(_, v)    => (v, 1)
         }
 
-       users.update(next)
+        val next = ordered.foldLeft(current) {
+            case (acc, Remove(u, _)) => acc.filterNot(_.id == u.id)
+            case (acc, Add(u, _))    => acc.filterNot(_.id == u.id) :+ u
+        }
 
-       Iterator.single(UserByLocationAggregate(key, next))
+        users.update(next)
+
+        Iterator.single(UserByLocationAggregate(key, next))
 
 
 
 
-object TWS1:
+object TWS2:
 
     def main(args: Array[String]): Unit =
 
@@ -86,7 +86,7 @@ object TWS1:
             .builder()
             .appName("Memory-source groupBy demo")
             .config("spark.sql.streaming.stateStore.providerClass",
-                    "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
+                "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
             .config("spark.sql.shuffle.partitions", 12)
             .master("local[*]")
             .getOrCreate()
@@ -101,28 +101,28 @@ object TWS1:
 
 
         val aggregationQuery = userChangeDS
-          .groupByKey(_.entity.location)
-          .transformWithState[UserByLocationAggregate](
-              new UserByLocationProcessor,
-              TimeMode.EventTime,
-              OutputMode.Update
-          )
-          //.tap { _.explain(true) }
-          .writeStream
-          .outputMode(OutputMode.Update)
-          .format("console")
-          .option("truncate", value = false)
-          .start()
+            .groupByKey(_.entity.location)
+            .transformWithState[UserByLocationAggregate](
+                new UserByLocationProcessor,
+                TimeMode.EventTime,
+                OutputMode.Update
+            )
+            //.tap { _.explain(true) }
+            .writeStream
+            .outputMode(OutputMode.Update)
+            .format("console")
+            .option("truncate", value = false)
+            .start()
 
 
         "1st micro-batch" pipe println
         memSrc.addData(
-          Add(User("1", "U1", "Paris"),    1L),
-          Add(User("2", "U2", "Paris"),    1L),
-          Add(User("3", "U3", "London"),   1L),
-          Add(User("4", "U4", "Brazzaville"), 1L),
-          Add(User("5", "U5", "New York"), 1L),
-          Add(User("7", "Maatari", "Madrid"), 1L)
+            Add(User("1", "U1", "Paris"),    1L),
+            Add(User("2", "U2", "Paris"),    1L),
+            Add(User("3", "U3", "London"),   1L),
+            Add(User("4", "U4", "Brazzaville"), 1L),
+            Add(User("5", "U5", "New York"), 1L),
+            Add(User("7", "Maatari", "Madrid"), 1L)
         )
 
         aggregationQuery.processAllAvailable()
@@ -144,13 +144,13 @@ object TWS1:
 
         "3rd micro-batch: Madrid -> Paris -> London" pipe println
         memSrc.addData(
-          // Move 7: Madrid -> Paris at version 3
-          Remove(User("7", "Maatari", "Madrid"), 3L),
-          Add(User("7", "Maatari", "Paris"),     3L),
+            // Move 7: Madrid -> Paris at version 3
+            Remove(User("7", "Maatari", "Madrid"), 3L),
+            Add(User("7", "Maatari", "Paris"),     3L),
 
-          // Move 7: Paris -> London at version 4
-          Remove(User("7", "Maatari", "Paris"),  4L),
-          Add(User("7", "Maatari", "London"),    4L)
+            // Move 7: Paris -> London at version 4
+            Remove(User("7", "Maatari", "Paris"),  4L),
+            Add(User("7", "Maatari", "London"),    4L)
         )
         aggregationQuery.processAllAvailable()
 
