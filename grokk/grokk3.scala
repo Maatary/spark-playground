@@ -81,6 +81,13 @@ object StreamingGroupByMemorySinkDemo {
         query.processAllAvailable()
         showSnapshot("after batch 2")
 
+        // 5-B. Second micro-batch – *only* an “update” row for user 1
+        memSrc.addData(Seq(
+            User(1, "London") // no matching delete for Paris!
+        ))
+        query.processAllAvailable()
+        showSnapshot("after batch 3")
+
         // 6. Clean up
         spark.stop()
     }
