@@ -987,64 +987,76 @@ object Delta7:
 
 object Delta8:
 
+    Logger.root
+          .clearHandlers()
+          .withHandler(minimumLevel = Some(Level.Error)) // no handler building needed
+          .replace()
 
-    case class User(id: Long, name: Option[String])
+
+
+    case class User(id: String, name: Option[String])
     case class RawChange[T](entity: T, changeType: String, commitVersion: Long, commitTimestamp: java.sql.Timestamp)
 
-    sealed abstract class Change[+T](val entity: T, val version: Long)
-    case class Add[T](override val entity: T, override val version: Long) extends Change[T](entity, version)
-    case class Remove[T](override val entity: T, override val version: Long) extends Change[T](entity, version)
+    sealed abstract class RowChange[+T](val entity: T, val version: Long)
+    case class Add[T](override val entity: T, override val version: Long) extends RowChange[T](entity, version)
+    case class Remove[T](override val entity: T, override val version: Long) extends RowChange[T](entity, version)
 
-    Logger.root
-        .clearHandlers()
-        .withHandler(minimumLevel = Some(Level.Error)) // no handler building needed
-        .replace()
+    sealed abstract class LogChange[+T](val key: String, val offset: Option[Long])
+    case class Upsert[T](override val key: String, val entity: T, override val offset: Option[Long] = none) extends LogChange[T](key, offset)
+    case class Tombstone[T](override val key: String, override val offset: Option[Long] = none) extends LogChange[T](key, offset)
 
-    def computeSortedUserChangeDS(changes: Dataset[Change[User]])(using Encoder[Change[User]]): Dataset[Change[User]] =
+
+
+
+
+
+
+    def computeSortedUserChangeDS(changes: Dataset[RowChange[User]])(using Encoder[RowChange[User]]): Dataset[RowChange[User]] =
         changes
           .toDF
           .withColumn("orderHint", when(col("_type") === lit("Remove"), lit(0)).otherwise(lit(1)))
           .orderBy(col("version").asc, col("orderHint").asc)
           .drop("orderHint")
-          .as[Change[User]]
+          .as[RowChange[User]]
 
-    def runShowUserChangeDS(userChangeDS: Dataset[Change[User]], trigger: Trigger)(using Encoder[Change[User]]): StreamingQuery =
+    def runShowUserChangeDS(userChangeDS: Dataset[RowChange[User]], trigger: Trigger)(using Encoder[RowChange[User]]): StreamingQuery =
         userChangeDS
           .writeStream
-          .foreachBatch { (ds: Dataset[Change[User]], _: Long) =>
+          .foreachBatch { (ds: Dataset[RowChange[User]], _: Long) =>
               computeSortedUserChangeDS(ds).show(false)
           }
           .trigger(trigger)
           .start()
 
-    def runUpsertUserDSIntoDelta(deltaTable: DeltaTable, userDS: Dataset[User]): StreamingQuery = {
+    def createUnsafeMergeSrcDFForChangeLog[T](ds: Dataset[LogChange[T]], idColName: String = "id")(using encT: Encoder[T]): DataFrame =
+        val nonKeyCols = encT.schema.fieldNames.filterNot(_ == idColName).map(f => col(s"entity.`$f`").as(f))
+        ds.toDF
+          .select((col("key").as(idColName) +: nonKeyCols :+ col("_type")): _*)
+          .alias("source")
 
-        val allOtherNull = userDS
-          .columns
-          .filterNot(_ == "id")
-          .map(colName => col("source." + colName).isNull)
-          .reduce(_ && _)
 
-        userDS
+
+    def runUnsafeUpsertChangeLogIntoDeltaFor[T](deltaTable: DeltaTable, ds: Dataset[LogChange[T]], idColName: String)(using Encoder[T]): StreamingQuery =
+        ds
           .writeStream
-          .foreachBatch { (ds: Dataset[User], batchId: Long) =>
+          .foreachBatch { (ds: Dataset[LogChange[T]], _: Long) =>
+
+              val source = createUnsafeMergeSrcDFForChangeLog[T](ds, idColName) // id, non-keys..., _type
+
               deltaTable
                 .as("target")
                 .merge(
-                  ds.toDF.as("source"),
-                  col("target.id") === col("source.id")
+                    source.as("source"),
+                    col(s"target.`$idColName`") === col(s"source.`$idColName`")
                 )
-                .whenMatched(allOtherNull)
-                .delete()
-                .whenMatched()
-                .updateAll()
-                .whenNotMatched(!allOtherNull) // <-- We don't insert tombstone.
-                .insertAll()
+                .whenMatched(col("source._type") === lit("Tombstone")).delete()
+                .whenMatched(col("source._type") === lit("Upsert")).updateAll()
+                .whenNotMatched(col("source._type") === lit("Upsert")).insertAll()
                 .execute()
                 .pipe { _ => () }
           }
           .start()
-    }
+
 
     def createDSFromMemSrcFor[T](memSrc: MemoryStream[T], partition: Int): Dataset[T] =
         memSrc.toDS()
@@ -1096,7 +1108,7 @@ object Delta8:
             .drop("orderHint")
             .as[RawChange[T]]
 
-    def computeChangeDSFor[T](raw: Dataset[RawChange[T]])(using Encoder[Change[T]]): Dataset[Change[T]] =
+    def computeChangeDSFor[T](raw: Dataset[RawChange[T]])(using Encoder[RowChange[T]]): Dataset[RowChange[T]] =
         raw.map { rc =>
             rc.changeType match
                 case "insert" | "update_postimage" => Add(rc.entity, rc.commitVersion)
@@ -1140,53 +1152,53 @@ object Delta8:
         //commit 0
         createDeltaTableFor[User](spark, Path(tablePath).absolute.toString, true)
 
-        val deltaTable  = DeltaTable.forPath(spark, tablePath)
-        val memSrc      = MemoryStream[User]
-        val userDS      = createDSFromMemSrcFor[User](memSrc, partition = 1)
+        val deltaTable      = DeltaTable.forPath(spark, tablePath)
+        val memSrc          = MemoryStream[LogChange[User]]
+        val userLogChangeDS = createDSFromMemSrcFor[LogChange[User]](memSrc, partition = 1)
 
-        val userDSInToDeltaQuery = runUpsertUserDSIntoDelta(deltaTable, userDS)
+        val upsertUserQuery = runUnsafeUpsertChangeLogIntoDeltaFor[User](deltaTable, userLogChangeDS, idColName = "id")
 
         //commit 1
         memSrc.addData(Seq(
-            User(1, Some("Alice")),
-            User(2, Some("Bob")),
-            User(3, Some("Charlie")),
-            User(4, Some("Dave"))
+            Upsert("1", User("1", Some("Alice"))),
+            Upsert("2", User("2", Some("Bob"))),
+            Upsert("3", User("3", Some("Charlie"))),
+            Upsert("4", User("4", Some("Dave")))
         ))
-        userDSInToDeltaQuery.processAllAvailable()
+        upsertUserQuery.processAllAvailable()
 
         //commit 2
         memSrc.addData(Seq(
-            User(2, Some("Dr. Bob")),
-            User(4, Some("Dr. Dave")),
-            User(5, Some("Dr. Davis"))
+            Upsert("2", User("2", Some("Dr. Bob"))),
+            Upsert("4", User("4", Some("Dr. Dave"))),
+            Upsert("5", User("5", Some("Dr. Davis")))
         ))
-        userDSInToDeltaQuery.processAllAvailable()
+        upsertUserQuery.processAllAvailable()
 
 
         //commit 3
          memSrc.addData(Seq(
-             User(3, Some("Mr. Charlie")),
-             User(4, Some("Super Dr. Dave"))
+             Upsert("3", User("3", Some("Mr. Charlie"))),
+             Upsert("4", User("4", Some("Super Dr. Dave")))
          ))
-        userDSInToDeltaQuery.processAllAvailable()
+        upsertUserQuery.processAllAvailable()
 
 
         //commit 4
         memSrc.addData(Seq(
-            User(5, None),
-            User(3, Some("Super Mr. Charlie")),
+            Tombstone[User]("5"),
+            Upsert("3", User("3", Some("Super Mr. Charlie"))),
         ))
-        userDSInToDeltaQuery.processAllAvailable()
+        upsertUserQuery.processAllAvailable()
 
 
 
-        val userChangeDS: Dataset[Change[User]] = createCdfDF(spark, tablePath, maxFilesPerTrigger = 2)
+        val userChangeDS: Dataset[RowChange[User]] = createCdfDF(spark, tablePath, maxFilesPerTrigger = 2)
           .pipe { cdfDF       => createUnsafeRawChangeDSFor[User](cdfDF) }
           .pipe { rawChangeDS => computeChangeDSFor[User](rawChangeDS)}
 
-        val rawChangeQuery = runShowUserChangeDS(userChangeDS, Trigger.AvailableNow)
+        val showUserQuery = runShowUserChangeDS(userChangeDS, Trigger.AvailableNow)
 
-        rawChangeQuery.awaitTermination()
+        showUserQuery.awaitTermination()
 
         spark.stop()
