@@ -1035,7 +1035,6 @@ object Delta8:
           .alias("source")
 
 
-
     def runUnsafeUpsertChangeLogIntoDeltaFor[T](deltaTable: DeltaTable, ds: Dataset[LogChange[T]], idColName: String)(using Encoder[T]): StreamingQuery =
         ds
           .writeStream
@@ -1196,7 +1195,7 @@ object Delta8:
 
         val userChangeDS: Dataset[RowChange[User]] = createCdfDF(spark, tablePath, maxFilesPerTrigger = 2)
           .pipe { cdfDF       => createUnsafeRawChangeDSFor[User](cdfDF) }
-          .pipe { rawChangeDS => computeChangeDSFor[User](rawChangeDS)}
+          .pipe { rowChangeDS => computeChangeDSFor[User](rowChangeDS)}
 
         val showUserQuery = runShowUserChangeDS(userChangeDS, Trigger.AvailableNow)
 
