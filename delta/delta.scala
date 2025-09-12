@@ -1193,6 +1193,7 @@ object Delta8:
 
 
 
+
         val userChangeDS: Dataset[RowChange[User]] = createCdfDF(spark, tablePath, maxFilesPerTrigger = 2)
           .pipe { cdfDF       => createUnsafeRawChangeDSFor[User](cdfDF) }
           .pipe { rawChangeDS => computeChangeDSFor[User](rawChangeDS)}
@@ -1200,5 +1201,13 @@ object Delta8:
         val showUserQuery = runShowUserChangeDS(userChangeDS, Trigger.AvailableNow)
 
         showUserQuery.awaitTermination()
+
+
+        spark
+          .read
+          .format("delta")
+          .load(tablePath)
+          .tap { _.printSchema() }
+          .tap { _.show() }
 
         spark.stop()
