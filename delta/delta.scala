@@ -993,8 +993,18 @@ object Delta8:
           .replace()
 
 
+    // JSON-LD contract
+    trait JsonLdEntity:
+        def `@id`: String
 
-    case class User(id: String, name: Option[String])
+    // Domain
+    case class User(`@id`: String, name: Option[String]) extends JsonLdEntity
+
+
+
+    //Data Change
+
+
     case class RawChange[T](entity: T, changeType: String, commitVersion: Long, commitTimestamp: java.sql.Timestamp)
 
     sealed abstract class RowChange[+T](val entity: T, val version: Long)
@@ -1028,25 +1038,25 @@ object Delta8:
           .trigger(trigger)
           .start()
 
-    def createUnsafeMergeSrcDFForChangeLog[T](ds: Dataset[LogChange[T]], idColName: String = "id")(using encT: Encoder[T]): DataFrame =
-        val nonKeyCols = encT.schema.fieldNames.filterNot(_ == idColName).map(f => col(s"entity.`$f`").as(f))
+    def createMergeSrcDFForChangeLog[T <: JsonLdEntity](ds: Dataset[LogChange[T]])(using encT: Encoder[T]): DataFrame =
+        val nonKeyCols = encT.schema.fieldNames.filterNot(_ == "@id").map(f => col(s"entity.`$f`").as(f))
         ds.toDF
-          .select((col("key").as(idColName) +: nonKeyCols :+ col("_type")): _*)
+          .select((col("key").as("@id") +: nonKeyCols :+ col("_type")): _*)
           .alias("source")
 
 
-    def runUnsafeUpsertChangeLogIntoDeltaFor[T](deltaTable: DeltaTable, ds: Dataset[LogChange[T]], idColName: String)(using Encoder[T]): StreamingQuery =
+    def runUpsertLogChangeIntoDeltaFor[T <: JsonLdEntity](deltaTable: DeltaTable, ds: Dataset[LogChange[T]])(using Encoder[T]): StreamingQuery =
         ds
           .writeStream
           .foreachBatch { (ds: Dataset[LogChange[T]], _: Long) =>
 
-              val source = createUnsafeMergeSrcDFForChangeLog[T](ds, idColName) // id, non-keys..., _type
+              val source = createMergeSrcDFForChangeLog[T](ds) // id, non-keys..., _type
 
               deltaTable
                 .as("target")
                 .merge(
                     source.as("source"),
-                    col(s"target.`$idColName`") === col(s"source.`$idColName`")
+                    col(s"target.`@id`") === col(s"source.`@id`")
                 )
                 .whenMatched(col("source._type") === lit("Tombstone")).delete()
                 .whenMatched(col("source._type") === lit("Upsert")).updateAll()
@@ -1155,7 +1165,7 @@ object Delta8:
         val memSrc          = MemoryStream[LogChange[User]]
         val userLogChangeDS = createDSFromMemSrcFor[LogChange[User]](memSrc, partition = 1)
 
-        val upsertUserQuery = runUnsafeUpsertChangeLogIntoDeltaFor[User](deltaTable, userLogChangeDS, idColName = "id")
+        val upsertUserQuery = runUpsertLogChangeIntoDeltaFor[User](deltaTable, userLogChangeDS)
 
         //commit 1
         memSrc.addData(Seq(
@@ -1194,8 +1204,8 @@ object Delta8:
 
 
         val userChangeDS: Dataset[RowChange[User]] = createCdfDF(spark, tablePath, maxFilesPerTrigger = 2)
-          .pipe { cdfDF       => createUnsafeRawChangeDSFor[User](cdfDF) }
-          .pipe { rowChangeDS => computeChangeDSFor[User](rowChangeDS)}
+            .pipe { cdfDF       => createUnsafeRawChangeDSFor[User](cdfDF) }
+            .pipe { rowChangeDS => computeChangeDSFor[User](rowChangeDS)}
 
         val showUserQuery = runShowUserChangeDS(userChangeDS, Trigger.AvailableNow)
 
