@@ -8,6 +8,9 @@ import org.apache.spark.sql.{Dataset, SparkSession}
 //import scribe.*
 //import scribe.format.*
 
+import scribe.*
+import scribe.format.*
+
 
 /**
  * == Constant Folding (Catalyst) — quick cheat‑sheet ==
@@ -60,6 +63,11 @@ import org.apache.spark.sql.{Dataset, SparkSession}
  */
 object catalyst11:
 
+    Logger.root
+          .clearHandlers()
+          .withHandler(minimumLevel = Some(Level.Error)) // no handler building needed
+          .replace()
+
     def makeSparkSession: SparkSession =
         SparkSession
             .builder()
@@ -79,10 +87,10 @@ object catalyst11:
             .selectExpr("1 + 2 * 3 + id as folded")
             .explain(true)
 
-        spark
-            .range(10)
-            .select(lit(1) + lit(2) + lit(3) + $"id" as "folded")
-            .explain(true)
+//        spark
+//            .range(10)
+//            .select(lit(1) + lit(2) + lit(3) + $"id" as "folded")
+//            .explain(true)
 
         spark
             .range(10)
