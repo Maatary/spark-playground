@@ -41,7 +41,7 @@ object SparkTypes11:
             .master("local[*]")
             .getOrCreate()
 
-    def main(args: Array[String]): Unit = {
+    def main(args: Array[String]): Unit =
 
         val spark = makeSparkSession
 
@@ -104,7 +104,7 @@ object SparkTypes11:
         Thread.sleep(Int.MaxValue)
 
         spark.stop()
-    }
+
 
 
 object SparkTypes12:
