@@ -1,0 +1,2240 @@
+<!doctype html>
+<html xmlns:og="http://opengraphprotocol.org/schema/" xmlns:fb="http://www.facebook.com/2008/fbml" lang="en-US"  class="touch-styles">
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    
+    <!-- This is Squarespace. --><!-- jack-vanlightly-ay5j -->
+<base href="">
+<meta charset="utf-8" />
+<title>Change query support in Delta Lake (3.2.0) &mdash; Jack Vanlightly</title>
+<meta http-equiv="Accept-CH" content="Sec-CH-UA-Platform-Version, Sec-CH-UA-Model" /><link rel="icon" type="image/x-icon" href="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/1548695273661-8N6YB3OPIPU0DYE0BD7F/favicon.ico"/>
+<link rel="canonical" href="https://jack-vanlightly.com/analyses/2024/9/24/change-query-support-in-delta-lake"/>
+<meta property="og:site_name" content="Jack Vanlightly"/>
+<meta property="og:title" content="Change query support in Delta Lake (3.2.0) &mdash; Jack Vanlightly"/>
+<meta property="og:url" content="https://jack-vanlightly.com/analyses/2024/9/24/change-query-support-in-delta-lake"/>
+<meta property="og:type" content="article"/>
+<meta property="og:description" content="This is the Delta Lake deep dive associated with the   table format comparisons - Change queries and CDC   blog post, which looks at how each table format supports change queries tables, including full CDC. This is not a how-to guide but an examination of Delta Lake capabilities through the lens of "/>
+<meta property="og:image" content="http://static1.squarespace.com/static/56894e581c1210fead06f878/t/66f28e47abc5947cf03bebed/1727172167468/DeltaLogSmall.png?format=1500w"/>
+<meta property="og:image:width" content="900"/>
+<meta property="og:image:height" content="482"/>
+<meta itemprop="name" content="Change query support in Delta Lake (3.2.0) — Jack Vanlightly"/>
+<meta itemprop="url" content="https://jack-vanlightly.com/analyses/2024/9/24/change-query-support-in-delta-lake"/>
+<meta itemprop="description" content="This is the Delta Lake deep dive associated with the   table format comparisons - Change queries and CDC   blog post, which looks at how each table format supports change queries tables, including full CDC. This is not a how-to guide but an examination of Delta Lake capabilities through the lens of "/>
+<meta itemprop="thumbnailUrl" content="http://static1.squarespace.com/static/56894e581c1210fead06f878/t/66f28e47abc5947cf03bebed/1727172167468/DeltaLogSmall.png?format=1500w"/>
+<link rel="image_src" href="http://static1.squarespace.com/static/56894e581c1210fead06f878/t/66f28e47abc5947cf03bebed/1727172167468/DeltaLogSmall.png?format=1500w" />
+<meta itemprop="image" content="http://static1.squarespace.com/static/56894e581c1210fead06f878/t/66f28e47abc5947cf03bebed/1727172167468/DeltaLogSmall.png?format=1500w"/>
+<meta itemprop="author" content="Jack Vanlightly"/>
+<meta itemprop="datePublished" content="2024-09-24T16:05:34+0200"/>
+<meta itemprop="dateModified" content="2024-09-27T14:03:53+0200"/>
+<meta itemprop="headline" content="Change query support in Delta Lake (3.2.0)"/>
+<meta itemprop="publisher" content="Jack Vanlightly"/>
+<meta name="twitter:title" content="Change query support in Delta Lake (3.2.0) — Jack Vanlightly"/>
+<meta name="twitter:image" content="http://static1.squarespace.com/static/56894e581c1210fead06f878/t/66f28e47abc5947cf03bebed/1727172167468/DeltaLogSmall.png?format=1500w"/>
+<meta name="twitter:url" content="https://jack-vanlightly.com/analyses/2024/9/24/change-query-support-in-delta-lake"/>
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:description" content="This is the Delta Lake deep dive associated with the   table format comparisons - Change queries and CDC   blog post, which looks at how each table format supports change queries tables, including full CDC. This is not a how-to guide but an examination of Delta Lake capabilities through the lens of "/>
+<meta name="description" content="This is the Delta Lake deep dive associated with the table format 
+comparisons - Change queries and CDC blog post, which looks at how each 
+table format supports change queries tables, including full CDC. This is 
+not a how-to guide but an examination of Delta Lake capabilities through 
+the lens of its internal design." />
+<link rel="preconnect" href="https://images.squarespace-cdn.com">
+<link rel="preconnect" href="https://use.typekit.net" crossorigin>
+<link rel="preconnect" href="https://p.typekit.net" crossorigin>
+<script type="text/javascript" src="//use.typekit.net/ik/HdqjUOxf0WxywaM7j3uM34urfF8j_MbzzZwHm884FWjfentIfFHN4UJLFRbh52jhWD9h52qXZQ9twAwUwRI3ZcmyZ2MhZR6a5g76MkG0jAFu-WsoShFGZAsude80ZkoRdhXCHKoyjamTiY8Djhy8ZYmC-Ao1Oco8if37OcBDOcu8OfG0-cBR-kuhjAoC-AiGieUoOABoFAG0SaBujW48Sagyjh90jhNlOfG0SaBujW48SagyjhmDjhy8ZYmC-Ao1OcFzdPUyjamTiY8Djhy8ZYmC-Ao1OcFzdPUyjamTiY8Djhy8ZYmC-Ao1Oco8ifUySkolZPU7jAFnOWZydcUTZhyXdYqljWqu-KoDSWmyScmDSeBRZPoRdhXC-cBR-kuhjAoC-AiGieUoOcFzdPUCdhFydeyzSabCSaBujW48SagyjhmDjhy8ZYmC-Ao1OcFzdPUaiaS0jAFu-WsoShFGZAsude80ZkoRdhXCiaiaOcBRiA8XpWFR-emqiAUTdcS0dcmXOYiaikoySkolZPUaiaS0-cBR-kuhjAoC-AiGieUoOABoFAG0SaBujW48Sagyjh90jhNlOYiaiko7jAFnOWZydcUTZhyXdYq0jhNlOYiaikoDSWmyScmDSeBRZWFR-emqiAUTdcS0jhNlJ6U3ScNt-AuyOAozicIKIcBqdh48OAiyScBldhoqOWgkdkG4f5J7IMMjMkMfH6qJn3IbMg6IJMJ7fbKlMsMMeMj6MKG4fJCgIMMjgkMfH6qJn6IbMg6bJMJ7fbKwMsMMegI6MKG4fVwXIMIjgfMfqMYT04pmg6.js" async fetchpriority="high" onload="try{Typekit.load();}catch(e){} document.documentElement.classList.remove('wf-loading');"></script>
+<script>document.documentElement.classList.add('wf-loading')</script>
+<style>@keyframes fonts-loading { 0%, 99% { color: transparent; } } html.wf-loading * { animation: fonts-loading 3s; }</style>
+<link rel="preconnect" href="https://use.typekit.net" crossorigin>
+<link rel="preconnect" href="https://p.typekit.net" crossorigin>
+<script type="text/javascript" src="//use.typekit.net/ik/HXoDrkDHET1NjdMxH4g8cif469UYLQg0q347Mg0ZSQwfecXJq-g_IKMkw2IowDbuWD9h52qXZQ9twAwUwRI3ZcmyZ2MhZR6a5gGMJ68ciWsuScIlSYbKIeZkZA81-YblShB0Sku3Scv7fbKImsMMeMb6MKG4fVN9IMMjgPMfH6qJqcqbMs6BJMHbMZHC1vJe.js" async fetchpriority="high" onload="try{Typekit.load();}catch(e){} document.documentElement.classList.remove('wf-loading');"></script>
+<script>document.documentElement.classList.add('wf-loading')</script>
+<style>@keyframes fonts-loading { 0%, 99% { color: transparent; } } html.wf-loading * { animation: fonts-loading 3s; }</style>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,400;0,700&family=Open+Sans:ital,wght@0,400&family=PT+Sans:ital,wght@0,400;0,700;1,400"><script type="text/javascript" crossorigin="anonymous" nomodule="nomodule" src="//assets.squarespace.com/@sqs/polyfiller/1.6/legacy.js"></script>
+<script type="text/javascript" crossorigin="anonymous" src="//assets.squarespace.com/@sqs/polyfiller/1.6/modern.js"></script>
+<script type="text/javascript">SQUARESPACE_ROLLUPS = {};</script>
+<script>(function(rollups, name) { if (!rollups[name]) { rollups[name] = {}; } rollups[name].js = ["//assets.squarespace.com/universal/scripts-compressed/extract-css-runtime-741c0dea8af1930f-min.en-US.js"]; })(SQUARESPACE_ROLLUPS, 'squarespace-extract_css_runtime');</script>
+<script crossorigin="anonymous" src="//assets.squarespace.com/universal/scripts-compressed/extract-css-runtime-741c0dea8af1930f-min.en-US.js" ></script><script>(function(rollups, name) { if (!rollups[name]) { rollups[name] = {}; } rollups[name].js = ["//assets.squarespace.com/universal/scripts-compressed/extract-css-moment-js-vendor-6f2a1f6ec9a41489-min.en-US.js"]; })(SQUARESPACE_ROLLUPS, 'squarespace-extract_css_moment_js_vendor');</script>
+<script crossorigin="anonymous" src="//assets.squarespace.com/universal/scripts-compressed/extract-css-moment-js-vendor-6f2a1f6ec9a41489-min.en-US.js" ></script><script>(function(rollups, name) { if (!rollups[name]) { rollups[name] = {}; } rollups[name].js = ["//assets.squarespace.com/universal/scripts-compressed/cldr-resource-pack-c5175d8ac6fd7505-min.en-US.js"]; })(SQUARESPACE_ROLLUPS, 'squarespace-cldr_resource_pack');</script>
+<script crossorigin="anonymous" src="//assets.squarespace.com/universal/scripts-compressed/cldr-resource-pack-c5175d8ac6fd7505-min.en-US.js" ></script><script>(function(rollups, name) { if (!rollups[name]) { rollups[name] = {}; } rollups[name].js = ["//assets.squarespace.com/universal/scripts-compressed/common-vendors-stable-fbd854d40b0804b7-min.en-US.js"]; })(SQUARESPACE_ROLLUPS, 'squarespace-common_vendors_stable');</script>
+<script crossorigin="anonymous" src="//assets.squarespace.com/universal/scripts-compressed/common-vendors-stable-fbd854d40b0804b7-min.en-US.js" ></script><script>(function(rollups, name) { if (!rollups[name]) { rollups[name] = {}; } rollups[name].js = ["//assets.squarespace.com/universal/scripts-compressed/common-vendors-0d4336b4fc25cbfe-min.en-US.js"]; })(SQUARESPACE_ROLLUPS, 'squarespace-common_vendors');</script>
+<script crossorigin="anonymous" src="//assets.squarespace.com/universal/scripts-compressed/common-vendors-0d4336b4fc25cbfe-min.en-US.js" ></script><script>(function(rollups, name) { if (!rollups[name]) { rollups[name] = {}; } rollups[name].js = ["//assets.squarespace.com/universal/scripts-compressed/common-49c71e7d93eabe90-min.en-US.js"]; })(SQUARESPACE_ROLLUPS, 'squarespace-common');</script>
+<script crossorigin="anonymous" src="//assets.squarespace.com/universal/scripts-compressed/common-49c71e7d93eabe90-min.en-US.js" ></script><script>(function(rollups, name) { if (!rollups[name]) { rollups[name] = {}; } rollups[name].js = ["//assets.squarespace.com/universal/scripts-compressed/performance-4f58ae13bc73934b-min.en-US.js"]; })(SQUARESPACE_ROLLUPS, 'squarespace-performance');</script>
+<script crossorigin="anonymous" src="//assets.squarespace.com/universal/scripts-compressed/performance-4f58ae13bc73934b-min.en-US.js" defer ></script><script data-name="static-context">Static = window.Static || {}; Static.SQUARESPACE_CONTEXT = {"betaFeatureFlags":["marketing_automations","contacts_and_campaigns_redesign","campaigns_discount_section_in_blasts","campaigns_new_image_layout_picker","i18n_beta_website_locales","product_pages_sdk_opt_in_enabled","campaigns_merch_state","campaigns_import_discounts","enable_form_submission_trigger","section_sdk_product_pages_phase_two_end","order_status_page_checkout_landing_enabled","section_sdk_product_pages_opt_in_modal","campaigns_discount_section_in_automations","section_sdk_product_pages_phase_two","marketing_landing_page","campaigns_thumbnail_layout"],"facebookAppId":"314192535267336","facebookApiVersion":"v6.0","rollups":{"squarespace-announcement-bar":{"js":"//assets.squarespace.com/universal/scripts-compressed/announcement-bar-83d8ba2e31790a0a-min.en-US.js"},"squarespace-audio-player":{"css":"//assets.squarespace.com/universal/styles-compressed/audio-player-b05f5197a871c566-min.en-US.css","js":"//assets.squarespace.com/universal/scripts-compressed/audio-player-e2f336aed5cf0c2f-min.en-US.js"},"squarespace-blog-collection-list":{"css":"//assets.squarespace.com/universal/styles-compressed/blog-collection-list-b4046463b72f34e2-min.en-US.css","js":"//assets.squarespace.com/universal/scripts-compressed/blog-collection-list-d311389abad5cb4e-min.en-US.js"},"squarespace-calendar-block-renderer":{"css":"//assets.squarespace.com/universal/styles-compressed/calendar-block-renderer-b72d08ba4421f5a0-min.en-US.css","js":"//assets.squarespace.com/universal/scripts-compressed/calendar-block-renderer-989ed2b88960ee55-min.en-US.js"},"squarespace-chartjs-helpers":{"css":"//assets.squarespace.com/universal/styles-compressed/chartjs-helpers-96b256171ee039c1-min.en-US.css","js":"//assets.squarespace.com/universal/scripts-compressed/chartjs-helpers-9dceb144c7651c6b-min.en-US.js"},"squarespace-comments":{"css":"//assets.squarespace.com/universal/styles-compressed/comments-30c4373c0e06acdf-min.en-US.css","js":"//assets.squarespace.com/universal/scripts-compressed/comments-7663723e95752849-min.en-US.js"},"squarespace-custom-css-popup":{"css":"//assets.squarespace.com/universal/styles-compressed/custom-css-popup-752e6cdc2aea87be-min.en-US.css","js":"//assets.squarespace.com/universal/scripts-compressed/custom-css-popup-6fab56bb83347334-min.en-US.js"},"squarespace-dialog":{"css":"//assets.squarespace.com/universal/styles-compressed/dialog-f9093f2d526b94df-min.en-US.css","js":"//assets.squarespace.com/universal/scripts-compressed/dialog-8b0c395fdd0ce18e-min.en-US.js"},"squarespace-events-collection":{"css":"//assets.squarespace.com/universal/styles-compressed/events-collection-b72d08ba4421f5a0-min.en-US.css","js":"//assets.squarespace.com/universal/scripts-compressed/events-collection-ffba1a9355e33695-min.en-US.js"},"squarespace-form-rendering-utils":{"js":"//assets.squarespace.com/universal/scripts-compressed/form-rendering-utils-873343befceda4b8-min.en-US.js"},"squarespace-forms":{"css":"//assets.squarespace.com/universal/styles-compressed/forms-0afd3c6ac30bbab1-min.en-US.css","js":"//assets.squarespace.com/universal/scripts-compressed/forms-1e5b4a4736479dee-min.en-US.js"},"squarespace-gallery-collection-list":{"css":"//assets.squarespace.com/universal/styles-compressed/gallery-collection-list-b4046463b72f34e2-min.en-US.css","js":"//assets.squarespace.com/universal/scripts-compressed/gallery-collection-list-576f85f760af6e95-min.en-US.js"},"squarespace-image-zoom":{"css":"//assets.squarespace.com/universal/styles-compressed/image-zoom-b4046463b72f34e2-min.en-US.css","js":"//assets.squarespace.com/universal/scripts-compressed/image-zoom-48fa25f53a8051bf-min.en-US.js"},"squarespace-pinterest":{"css":"//assets.squarespace.com/universal/styles-compressed/pinterest-b4046463b72f34e2-min.en-US.css","js":"//assets.squarespace.com/universal/scripts-compressed/pinterest-75d7f3d4a2ceabe8-min.en-US.js"},"squarespace-popup-overlay":{"css":"//assets.squarespace.com/universal/styles-compressed/popup-overlay-b742b752f5880972-min.en-US.css","js":"//assets.squarespace.com/universal/scripts-compressed/popup-overlay-cf3a310e454e0444-min.en-US.js"},"squarespace-product-quick-view":{"css":"//assets.squarespace.com/universal/styles-compressed/product-quick-view-114ce992406091f6-min.en-US.css","js":"//assets.squarespace.com/universal/scripts-compressed/product-quick-view-7fcc5dc7493ddaa8-min.en-US.js"},"squarespace-products-collection-item-v2":{"css":"//assets.squarespace.com/universal/styles-compressed/products-collection-item-v2-b4046463b72f34e2-min.en-US.css","js":"//assets.squarespace.com/universal/scripts-compressed/products-collection-item-v2-18f8dd35f59f518d-min.en-US.js"},"squarespace-products-collection-list-v2":{"css":"//assets.squarespace.com/universal/styles-compressed/products-collection-list-v2-b4046463b72f34e2-min.en-US.css","js":"//assets.squarespace.com/universal/scripts-compressed/products-collection-list-v2-de04c98879eafaa3-min.en-US.js"},"squarespace-search-page":{"css":"//assets.squarespace.com/universal/styles-compressed/search-page-90a67fc09b9b32c6-min.en-US.css","js":"//assets.squarespace.com/universal/scripts-compressed/search-page-343cca78c8306221-min.en-US.js"},"squarespace-search-preview":{"js":"//assets.squarespace.com/universal/scripts-compressed/search-preview-5289c00482070273-min.en-US.js"},"squarespace-simple-liking":{"css":"//assets.squarespace.com/universal/styles-compressed/simple-liking-701bf8bbc05ec6aa-min.en-US.css","js":"//assets.squarespace.com/universal/scripts-compressed/simple-liking-8213887e30899090-min.en-US.js"},"squarespace-social-buttons":{"css":"//assets.squarespace.com/universal/styles-compressed/social-buttons-95032e5fa98e47a5-min.en-US.css","js":"//assets.squarespace.com/universal/scripts-compressed/social-buttons-10e8e8bdb5f92bee-min.en-US.js"},"squarespace-tourdates":{"css":"//assets.squarespace.com/universal/styles-compressed/tourdates-b4046463b72f34e2-min.en-US.css","js":"//assets.squarespace.com/universal/scripts-compressed/tourdates-06e589b5935e60d7-min.en-US.js"},"squarespace-website-overlays-manager":{"css":"//assets.squarespace.com/universal/styles-compressed/website-overlays-manager-07ea5a4e004e6710-min.en-US.css","js":"//assets.squarespace.com/universal/scripts-compressed/website-overlays-manager-ff4b925e06961fbd-min.en-US.js"}},"pageType":50,"website":{"id":"56894e581c1210fead06f878","identifier":"jack-vanlightly-ay5j","websiteType":1,"contentModifiedOn":1741870285224,"cloneable":false,"hasBeenCloneable":false,"siteStatus":{},"language":"en-US","timeZone":"Europe/Madrid","machineTimeZoneOffset":7200000,"timeZoneOffset":7200000,"timeZoneAbbr":"CEST","siteTitle":"Jack Vanlightly","fullSiteTitle":"Change query support in Delta Lake (3.2.0) \u2014 Jack Vanlightly","siteDescription":"","shareButtonOptions":{"1":true,"3":true,"8":true,"4":true,"6":true,"7":true,"2":true},"authenticUrl":"https://jack-vanlightly.com","internalUrl":"https://jack-vanlightly-ay5j.squarespace.com","baseUrl":"https://jack-vanlightly.com","primaryDomain":"jack-vanlightly.com","sslSetting":3,"isHstsEnabled":false,"typekitId":"","statsMigrated":false,"imageMetadataProcessingEnabled":false,"screenshotId":"81e052b35a85119a037791daf5e83a6ef8c0f3c2b2e88c3c1955544c110a477c","captchaSettings":{"siteKey":"","enabledForDonations":false},"showOwnerLogin":false},"websiteSettings":{"id":"56894e581c1210fead06f87a","websiteId":"56894e581c1210fead06f878","type":"Personal","subjects":[],"country":"ES","state":"CT","simpleLikingEnabled":true,"mobileInfoBarSettings":{"isContactEmailEnabled":false,"isContactPhoneNumberEnabled":false,"isLocationEnabled":false,"isBusinessHoursEnabled":false},"popupOverlaySettings":{"style":1,"enabledPages":[]},"commentLikesAllowed":true,"commentAnonAllowed":true,"commentThreaded":true,"commentApprovalRequired":true,"commentAvatarsOn":true,"commentSortType":2,"commentFlagThreshold":0,"commentFlagsAllowed":true,"commentEnableByDefault":true,"commentDisableAfterDaysDefault":0,"disqusShortname":"","commentsEnabled":true,"contactPhoneNumber":"","storeSettings":{"returnPolicy":null,"termsOfService":null,"privacyPolicy":null,"expressCheckout":false,"continueShoppingLinkUrl":"/","useLightCart":false,"showNoteField":false,"shippingCountryDefaultValue":"US","billToShippingDefaultValue":false,"showShippingPhoneNumber":true,"isShippingPhoneRequired":false,"showBillingPhoneNumber":true,"isBillingPhoneRequired":false,"currenciesSupported":["CHF","HKD","MXN","EUR","DKK","USD","CAD","MYR","NOK","THB","AUD","SGD","ILS","PLN","GBP","CZK","SEK","NZD","PHP","RUB"],"defaultCurrency":"USD","selectedCurrency":"USD","measurementStandard":2,"orderConfirmationInjectCode":"","showCustomCheckoutForm":false,"checkoutPageMarketingOptInEnabled":false,"enableMailingListOptInByDefault":true,"sameAsRetailLocation":false,"merchandisingSettings":{"scarcityEnabledOnProductItems":false,"scarcityEnabledOnProductBlocks":false,"scarcityMessageType":"DEFAULT_SCARCITY_MESSAGE","scarcityThreshold":10,"multipleQuantityAllowedForServices":true,"restockNotificationsEnabled":false,"restockNotificationsSuccessText":"","restockNotificationsMailingListSignUpEnabled":false,"relatedProductsEnabled":false,"relatedProductsOrdering":"random","soldOutVariantsDropdownDisabled":false,"productComposerOptedIn":false,"productComposerABTestOptedOut":false,"productReviewsEnabled":false,"displayImportedProductReviewsEnabled":false,"hasOptedToCollectNativeReviews":false},"minimumOrderSubtotalEnabled":false,"isLive":false,"multipleQuantityAllowedForServices":true},"useEscapeKeyToLogin":true,"ssBadgeType":1,"ssBadgePosition":4,"ssBadgeVisibility":1,"ssBadgeDevices":1,"pinterestOverlayOptions":{"mode":"disabled"},"userAccountsSettings":{"loginAllowed":false,"signupAllowed":false}},"cookieSettings":{"isCookieBannerEnabled":false,"isRestrictiveCookiePolicyEnabled":false,"cookieBannerText":"","cookieBannerTheme":"","cookieBannerVariant":"","cookieBannerPosition":"","cookieBannerCtaVariant":"","cookieBannerCtaText":"","cookieBannerAcceptType":"OPT_IN","cookieBannerOptOutCtaText":"","cookieBannerHasOptOut":false,"cookieBannerHasManageCookies":true,"cookieBannerManageCookiesLabel":"","cookieBannerSavedPreferencesText":"","cookieBannerSavedPreferencesLayout":"PILL"},"websiteCloneable":false,"collection":{"title":"Analyses","id":"638cdc03652c7d3aa50eea6d","fullUrl":"/analyses","type":1,"permissionType":1},"item":{"title":"Change query support in Delta Lake (3.2.0)","id":"66f28d52e8443b353c2f24ba","fullUrl":"/analyses/2024/9/24/change-query-support-in-delta-lake","publicCommentCount":0,"commentState":2,"recordType":1},"subscribed":false,"appDomain":"squarespace.com","templateTweakable":true,"tweakJSON":{"aspect-ratio":"Auto","banner-slideshow-controls":"Arrows","gallery-arrow-style":"No Background","gallery-aspect-ratio":"3:2 Standard","gallery-auto-crop":"true","gallery-autoplay":"false","gallery-design":"Grid","gallery-info-overlay":"Show on Hover","gallery-loop":"false","gallery-navigation":"Bullets","gallery-show-arrows":"true","gallery-transitions":"Fade","galleryArrowBackground":"rgba(34,34,34,1)","galleryArrowColor":"rgba(255,255,255,1)","galleryAutoplaySpeed":"3","galleryCircleColor":"rgba(255,255,255,1)","galleryInfoBackground":"rgba(0, 0, 0, .7)","galleryThumbnailSize":"100px","gridSize":"280px","gridSpacing":"10px","logoContainerWidth":"140px","product-gallery-auto-crop":"false","product-image-auto-crop":"true","siteTitleContainerWidth":"220px","tweak-v1-related-products-title-spacing":"50px"},"templateId":"52a74dafe4b073a80cd253c5","templateVersion":"7","pageFeatures":[1,2,4],"gmRenderKey":"QUl6YVN5Q0JUUk9xNkx1dkZfSUUxcjQ2LVQ0QWVUU1YtMGQ3bXk4","templateScriptsRootUrl":"https://static1.squarespace.com/static/ta/52a74d9ae4b0253945d2aee9/1054/scripts/","impersonatedSession":false,"tzData":{"zones":[[60,"EU","CE%sT",null]],"rules":{"EU":[[1981,"max",null,"Mar","lastSun","1:00u","1:00","S"],[1996,"max",null,"Oct","lastSun","1:00u","0",null]]}},"showAnnouncementBar":false,"recaptchaEnterpriseContext":{"recaptchaEnterpriseSiteKey":"6LdDFQwjAAAAAPigEvvPgEVbb7QBm-TkVJdDTlAv"},"i18nContext":{"timeZoneData":{"id":"Europe/Madrid","name":"Central European Time"}},"env":"PRODUCTION","visitorFormContext":{"formFieldFormats":{"initialAddressFormat":{"id":0,"type":"ADDRESS","country":"ES","labelLocale":"en","fields":[{"type":"FIELD","label":"Address Line 1","identifier":"Line1","length":0,"required":true,"metadata":{"autocomplete":"address-line1"}},{"type":"SEPARATOR","label":"\n","identifier":"Newline","length":0,"required":false,"metadata":{}},{"type":"FIELD","label":"Address Line 2","identifier":"Line2","length":0,"required":false,"metadata":{"autocomplete":"address-line2"}},{"type":"SEPARATOR","label":"\n","identifier":"Newline","length":0,"required":false,"metadata":{}},{"type":"FIELD","label":"Postal Code","identifier":"Zip","length":0,"required":true,"metadata":{"autocomplete":"postal-code"}},{"type":"SEPARATOR","label":" ","identifier":"Space","length":0,"required":false,"metadata":{}},{"type":"FIELD","label":"City","identifier":"City","length":0,"required":true,"metadata":{"autocomplete":"address-level2"}},{"type":"SEPARATOR","label":" ","identifier":"Space","length":0,"required":false,"metadata":{}},{"type":"FIELD","label":"Province","identifier":"State","length":0,"required":true,"metadata":{"autocomplete":"address-level1"}}]},"initialNameOrder":"GIVEN_FIRST","initialPhoneFormat":{"id":0,"type":"PHONE_NUMBER","country":"ES","labelLocale":"en-US","fields":[{"type":"FIELD","label":"1","identifier":"1","length":3,"required":false,"metadata":{}},{"type":"SEPARATOR","label":" ","identifier":"Space","length":0,"required":false,"metadata":{}},{"type":"FIELD","label":"2","identifier":"2","length":3,"required":false,"metadata":{}},{"type":"SEPARATOR","label":" ","identifier":"Space","length":0,"required":false,"metadata":{}},{"type":"FIELD","label":"3","identifier":"3","length":14,"required":false,"metadata":{}}]},"countries":[{"name":"Afghanistan","code":"AF","phoneCode":"+93"},{"name":"\u00C5land Islands","code":"AX","phoneCode":"+358"},{"name":"Albania","code":"AL","phoneCode":"+355"},{"name":"Algeria","code":"DZ","phoneCode":"+213"},{"name":"American Samoa","code":"AS","phoneCode":"+1"},{"name":"Andorra","code":"AD","phoneCode":"+376"},{"name":"Angola","code":"AO","phoneCode":"+244"},{"name":"Anguilla","code":"AI","phoneCode":"+1"},{"name":"Antigua & Barbuda","code":"AG","phoneCode":"+1"},{"name":"Argentina","code":"AR","phoneCode":"+54"},{"name":"Armenia","code":"AM","phoneCode":"+374"},{"name":"Aruba","code":"AW","phoneCode":"+297"},{"name":"Ascension Island","code":"AC","phoneCode":"+247"},{"name":"Australia","code":"AU","phoneCode":"+61"},{"name":"Austria","code":"AT","phoneCode":"+43"},{"name":"Azerbaijan","code":"AZ","phoneCode":"+994"},{"name":"Bahamas","code":"BS","phoneCode":"+1"},{"name":"Bahrain","code":"BH","phoneCode":"+973"},{"name":"Bangladesh","code":"BD","phoneCode":"+880"},{"name":"Barbados","code":"BB","phoneCode":"+1"},{"name":"Belarus","code":"BY","phoneCode":"+375"},{"name":"Belgium","code":"BE","phoneCode":"+32"},{"name":"Belize","code":"BZ","phoneCode":"+501"},{"name":"Benin","code":"BJ","phoneCode":"+229"},{"name":"Bermuda","code":"BM","phoneCode":"+1"},{"name":"Bhutan","code":"BT","phoneCode":"+975"},{"name":"Bolivia","code":"BO","phoneCode":"+591"},{"name":"Bosnia & Herzegovina","code":"BA","phoneCode":"+387"},{"name":"Botswana","code":"BW","phoneCode":"+267"},{"name":"Brazil","code":"BR","phoneCode":"+55"},{"name":"British Indian Ocean Territory","code":"IO","phoneCode":"+246"},{"name":"British Virgin Islands","code":"VG","phoneCode":"+1"},{"name":"Brunei","code":"BN","phoneCode":"+673"},{"name":"Bulgaria","code":"BG","phoneCode":"+359"},{"name":"Burkina Faso","code":"BF","phoneCode":"+226"},{"name":"Burundi","code":"BI","phoneCode":"+257"},{"name":"Cambodia","code":"KH","phoneCode":"+855"},{"name":"Cameroon","code":"CM","phoneCode":"+237"},{"name":"Canada","code":"CA","phoneCode":"+1"},{"name":"Cape Verde","code":"CV","phoneCode":"+238"},{"name":"Caribbean Netherlands","code":"BQ","phoneCode":"+599"},{"name":"Cayman Islands","code":"KY","phoneCode":"+1"},{"name":"Central African Republic","code":"CF","phoneCode":"+236"},{"name":"Chad","code":"TD","phoneCode":"+235"},{"name":"Chile","code":"CL","phoneCode":"+56"},{"name":"China","code":"CN","phoneCode":"+86"},{"name":"Christmas Island","code":"CX","phoneCode":"+61"},{"name":"Cocos (Keeling) Islands","code":"CC","phoneCode":"+61"},{"name":"Colombia","code":"CO","phoneCode":"+57"},{"name":"Comoros","code":"KM","phoneCode":"+269"},{"name":"Congo - Brazzaville","code":"CG","phoneCode":"+242"},{"name":"Congo - Kinshasa","code":"CD","phoneCode":"+243"},{"name":"Cook Islands","code":"CK","phoneCode":"+682"},{"name":"Costa Rica","code":"CR","phoneCode":"+506"},{"name":"C\u00F4te d\u2019Ivoire","code":"CI","phoneCode":"+225"},{"name":"Croatia","code":"HR","phoneCode":"+385"},{"name":"Cuba","code":"CU","phoneCode":"+53"},{"name":"Cura\u00E7ao","code":"CW","phoneCode":"+599"},{"name":"Cyprus","code":"CY","phoneCode":"+357"},{"name":"Czechia","code":"CZ","phoneCode":"+420"},{"name":"Denmark","code":"DK","phoneCode":"+45"},{"name":"Djibouti","code":"DJ","phoneCode":"+253"},{"name":"Dominica","code":"DM","phoneCode":"+1"},{"name":"Dominican Republic","code":"DO","phoneCode":"+1"},{"name":"Ecuador","code":"EC","phoneCode":"+593"},{"name":"Egypt","code":"EG","phoneCode":"+20"},{"name":"El Salvador","code":"SV","phoneCode":"+503"},{"name":"Equatorial Guinea","code":"GQ","phoneCode":"+240"},{"name":"Eritrea","code":"ER","phoneCode":"+291"},{"name":"Estonia","code":"EE","phoneCode":"+372"},{"name":"Eswatini","code":"SZ","phoneCode":"+268"},{"name":"Ethiopia","code":"ET","phoneCode":"+251"},{"name":"Falkland Islands","code":"FK","phoneCode":"+500"},{"name":"Faroe Islands","code":"FO","phoneCode":"+298"},{"name":"Fiji","code":"FJ","phoneCode":"+679"},{"name":"Finland","code":"FI","phoneCode":"+358"},{"name":"France","code":"FR","phoneCode":"+33"},{"name":"French Guiana","code":"GF","phoneCode":"+594"},{"name":"French Polynesia","code":"PF","phoneCode":"+689"},{"name":"Gabon","code":"GA","phoneCode":"+241"},{"name":"Gambia","code":"GM","phoneCode":"+220"},{"name":"Georgia","code":"GE","phoneCode":"+995"},{"name":"Germany","code":"DE","phoneCode":"+49"},{"name":"Ghana","code":"GH","phoneCode":"+233"},{"name":"Gibraltar","code":"GI","phoneCode":"+350"},{"name":"Greece","code":"GR","phoneCode":"+30"},{"name":"Greenland","code":"GL","phoneCode":"+299"},{"name":"Grenada","code":"GD","phoneCode":"+1"},{"name":"Guadeloupe","code":"GP","phoneCode":"+590"},{"name":"Guam","code":"GU","phoneCode":"+1"},{"name":"Guatemala","code":"GT","phoneCode":"+502"},{"name":"Guernsey","code":"GG","phoneCode":"+44"},{"name":"Guinea","code":"GN","phoneCode":"+224"},{"name":"Guinea-Bissau","code":"GW","phoneCode":"+245"},{"name":"Guyana","code":"GY","phoneCode":"+592"},{"name":"Haiti","code":"HT","phoneCode":"+509"},{"name":"Honduras","code":"HN","phoneCode":"+504"},{"name":"Hong Kong SAR China","code":"HK","phoneCode":"+852"},{"name":"Hungary","code":"HU","phoneCode":"+36"},{"name":"Iceland","code":"IS","phoneCode":"+354"},{"name":"India","code":"IN","phoneCode":"+91"},{"name":"Indonesia","code":"ID","phoneCode":"+62"},{"name":"Iran","code":"IR","phoneCode":"+98"},{"name":"Iraq","code":"IQ","phoneCode":"+964"},{"name":"Ireland","code":"IE","phoneCode":"+353"},{"name":"Isle of Man","code":"IM","phoneCode":"+44"},{"name":"Israel","code":"IL","phoneCode":"+972"},{"name":"Italy","code":"IT","phoneCode":"+39"},{"name":"Jamaica","code":"JM","phoneCode":"+1"},{"name":"Japan","code":"JP","phoneCode":"+81"},{"name":"Jersey","code":"JE","phoneCode":"+44"},{"name":"Jordan","code":"JO","phoneCode":"+962"},{"name":"Kazakhstan","code":"KZ","phoneCode":"+7"},{"name":"Kenya","code":"KE","phoneCode":"+254"},{"name":"Kiribati","code":"KI","phoneCode":"+686"},{"name":"Kosovo","code":"XK","phoneCode":"+383"},{"name":"Kuwait","code":"KW","phoneCode":"+965"},{"name":"Kyrgyzstan","code":"KG","phoneCode":"+996"},{"name":"Laos","code":"LA","phoneCode":"+856"},{"name":"Latvia","code":"LV","phoneCode":"+371"},{"name":"Lebanon","code":"LB","phoneCode":"+961"},{"name":"Lesotho","code":"LS","phoneCode":"+266"},{"name":"Liberia","code":"LR","phoneCode":"+231"},{"name":"Libya","code":"LY","phoneCode":"+218"},{"name":"Liechtenstein","code":"LI","phoneCode":"+423"},{"name":"Lithuania","code":"LT","phoneCode":"+370"},{"name":"Luxembourg","code":"LU","phoneCode":"+352"},{"name":"Macao SAR China","code":"MO","phoneCode":"+853"},{"name":"Madagascar","code":"MG","phoneCode":"+261"},{"name":"Malawi","code":"MW","phoneCode":"+265"},{"name":"Malaysia","code":"MY","phoneCode":"+60"},{"name":"Maldives","code":"MV","phoneCode":"+960"},{"name":"Mali","code":"ML","phoneCode":"+223"},{"name":"Malta","code":"MT","phoneCode":"+356"},{"name":"Marshall Islands","code":"MH","phoneCode":"+692"},{"name":"Martinique","code":"MQ","phoneCode":"+596"},{"name":"Mauritania","code":"MR","phoneCode":"+222"},{"name":"Mauritius","code":"MU","phoneCode":"+230"},{"name":"Mayotte","code":"YT","phoneCode":"+262"},{"name":"Mexico","code":"MX","phoneCode":"+52"},{"name":"Micronesia","code":"FM","phoneCode":"+691"},{"name":"Moldova","code":"MD","phoneCode":"+373"},{"name":"Monaco","code":"MC","phoneCode":"+377"},{"name":"Mongolia","code":"MN","phoneCode":"+976"},{"name":"Montenegro","code":"ME","phoneCode":"+382"},{"name":"Montserrat","code":"MS","phoneCode":"+1"},{"name":"Morocco","code":"MA","phoneCode":"+212"},{"name":"Mozambique","code":"MZ","phoneCode":"+258"},{"name":"Myanmar (Burma)","code":"MM","phoneCode":"+95"},{"name":"Namibia","code":"NA","phoneCode":"+264"},{"name":"Nauru","code":"NR","phoneCode":"+674"},{"name":"Nepal","code":"NP","phoneCode":"+977"},{"name":"Netherlands","code":"NL","phoneCode":"+31"},{"name":"New Caledonia","code":"NC","phoneCode":"+687"},{"name":"New Zealand","code":"NZ","phoneCode":"+64"},{"name":"Nicaragua","code":"NI","phoneCode":"+505"},{"name":"Niger","code":"NE","phoneCode":"+227"},{"name":"Nigeria","code":"NG","phoneCode":"+234"},{"name":"Niue","code":"NU","phoneCode":"+683"},{"name":"Norfolk Island","code":"NF","phoneCode":"+672"},{"name":"Northern Mariana Islands","code":"MP","phoneCode":"+1"},{"name":"North Korea","code":"KP","phoneCode":"+850"},{"name":"North Macedonia","code":"MK","phoneCode":"+389"},{"name":"Norway","code":"NO","phoneCode":"+47"},{"name":"Oman","code":"OM","phoneCode":"+968"},{"name":"Pakistan","code":"PK","phoneCode":"+92"},{"name":"Palau","code":"PW","phoneCode":"+680"},{"name":"Palestinian Territories","code":"PS","phoneCode":"+970"},{"name":"Panama","code":"PA","phoneCode":"+507"},{"name":"Papua New Guinea","code":"PG","phoneCode":"+675"},{"name":"Paraguay","code":"PY","phoneCode":"+595"},{"name":"Peru","code":"PE","phoneCode":"+51"},{"name":"Philippines","code":"PH","phoneCode":"+63"},{"name":"Poland","code":"PL","phoneCode":"+48"},{"name":"Portugal","code":"PT","phoneCode":"+351"},{"name":"Puerto Rico","code":"PR","phoneCode":"+1"},{"name":"Qatar","code":"QA","phoneCode":"+974"},{"name":"R\u00E9union","code":"RE","phoneCode":"+262"},{"name":"Romania","code":"RO","phoneCode":"+40"},{"name":"Russia","code":"RU","phoneCode":"+7"},{"name":"Rwanda","code":"RW","phoneCode":"+250"},{"name":"Samoa","code":"WS","phoneCode":"+685"},{"name":"San Marino","code":"SM","phoneCode":"+378"},{"name":"S\u00E3o Tom\u00E9 & Pr\u00EDncipe","code":"ST","phoneCode":"+239"},{"name":"Saudi Arabia","code":"SA","phoneCode":"+966"},{"name":"Senegal","code":"SN","phoneCode":"+221"},{"name":"Serbia","code":"RS","phoneCode":"+381"},{"name":"Seychelles","code":"SC","phoneCode":"+248"},{"name":"Sierra Leone","code":"SL","phoneCode":"+232"},{"name":"Singapore","code":"SG","phoneCode":"+65"},{"name":"Sint Maarten","code":"SX","phoneCode":"+1"},{"name":"Slovakia","code":"SK","phoneCode":"+421"},{"name":"Slovenia","code":"SI","phoneCode":"+386"},{"name":"Solomon Islands","code":"SB","phoneCode":"+677"},{"name":"Somalia","code":"SO","phoneCode":"+252"},{"name":"South Africa","code":"ZA","phoneCode":"+27"},{"name":"South Korea","code":"KR","phoneCode":"+82"},{"name":"South Sudan","code":"SS","phoneCode":"+211"},{"name":"Spain","code":"ES","phoneCode":"+34"},{"name":"Sri Lanka","code":"LK","phoneCode":"+94"},{"name":"St. Barth\u00E9lemy","code":"BL","phoneCode":"+590"},{"name":"St. Helena","code":"SH","phoneCode":"+290"},{"name":"St. Kitts & Nevis","code":"KN","phoneCode":"+1"},{"name":"St. Lucia","code":"LC","phoneCode":"+1"},{"name":"St. Martin","code":"MF","phoneCode":"+590"},{"name":"St. Pierre & Miquelon","code":"PM","phoneCode":"+508"},{"name":"St. Vincent & Grenadines","code":"VC","phoneCode":"+1"},{"name":"Sudan","code":"SD","phoneCode":"+249"},{"name":"Suriname","code":"SR","phoneCode":"+597"},{"name":"Svalbard & Jan Mayen","code":"SJ","phoneCode":"+47"},{"name":"Sweden","code":"SE","phoneCode":"+46"},{"name":"Switzerland","code":"CH","phoneCode":"+41"},{"name":"Syria","code":"SY","phoneCode":"+963"},{"name":"Taiwan","code":"TW","phoneCode":"+886"},{"name":"Tajikistan","code":"TJ","phoneCode":"+992"},{"name":"Tanzania","code":"TZ","phoneCode":"+255"},{"name":"Thailand","code":"TH","phoneCode":"+66"},{"name":"Timor-Leste","code":"TL","phoneCode":"+670"},{"name":"Togo","code":"TG","phoneCode":"+228"},{"name":"Tokelau","code":"TK","phoneCode":"+690"},{"name":"Tonga","code":"TO","phoneCode":"+676"},{"name":"Trinidad & Tobago","code":"TT","phoneCode":"+1"},{"name":"Tristan da Cunha","code":"TA","phoneCode":"+290"},{"name":"Tunisia","code":"TN","phoneCode":"+216"},{"name":"T\u00FCrkiye","code":"TR","phoneCode":"+90"},{"name":"Turkmenistan","code":"TM","phoneCode":"+993"},{"name":"Turks & Caicos Islands","code":"TC","phoneCode":"+1"},{"name":"Tuvalu","code":"TV","phoneCode":"+688"},{"name":"U.S. Virgin Islands","code":"VI","phoneCode":"+1"},{"name":"Uganda","code":"UG","phoneCode":"+256"},{"name":"Ukraine","code":"UA","phoneCode":"+380"},{"name":"United Arab Emirates","code":"AE","phoneCode":"+971"},{"name":"United Kingdom","code":"GB","phoneCode":"+44"},{"name":"United States","code":"US","phoneCode":"+1"},{"name":"Uruguay","code":"UY","phoneCode":"+598"},{"name":"Uzbekistan","code":"UZ","phoneCode":"+998"},{"name":"Vanuatu","code":"VU","phoneCode":"+678"},{"name":"Vatican City","code":"VA","phoneCode":"+39"},{"name":"Venezuela","code":"VE","phoneCode":"+58"},{"name":"Vietnam","code":"VN","phoneCode":"+84"},{"name":"Wallis & Futuna","code":"WF","phoneCode":"+681"},{"name":"Western Sahara","code":"EH","phoneCode":"+212"},{"name":"Yemen","code":"YE","phoneCode":"+967"},{"name":"Zambia","code":"ZM","phoneCode":"+260"},{"name":"Zimbabwe","code":"ZW","phoneCode":"+263"}]},"localizedStrings":{"validation":{"noValidSelection":"A valid selection must be made.","invalidUrl":"Must be a valid URL.","stringTooLong":"Value should have a length no longer than {0}.","containsInvalidKey":"{0} contains an invalid key.","invalidTwitterUsername":"Must be a valid Twitter username.","valueOutsideRange":"Value must be in the range {0} to {1}.","invalidPassword":"Passwords should not contain whitespace.","missingRequiredSubfields":"{0} is missing required subfields: {1}","invalidCurrency":"Currency value should be formatted like 1234 or 123.99.","invalidMapSize":"Value should contain exactly {0} elements.","subfieldsRequired":"All fields in {0} are required.","formSubmissionFailed":"Form submission failed. Review the following information: {0}.","invalidCountryCode":"Country code should have an optional plus and up to 4 digits.","invalidDate":"This is not a real date.","required":"{0} is required.","invalidStringLength":"Value should be {0} characters long.","invalidEmail":"Email addresses should follow the format user@domain.com.","invalidListLength":"Value should be {0} elements long.","allEmpty":"Please fill out at least one form field.","missingRequiredQuestion":"Missing a required question.","invalidQuestion":"Contained an invalid question.","captchaFailure":"Captcha validation failed. Please try again.","stringTooShort":"Value should have a length of at least {0}.","invalid":"{0} is not valid.","formErrors":"Form Errors","containsInvalidValue":"{0} contains an invalid value.","invalidUnsignedNumber":"Numbers must contain only digits and no other characters.","invalidName":"Valid names contain only letters, numbers, spaces, ', or - characters."},"submit":"Submit","status":{"title":"{@} Block","learnMore":"Learn more"},"name":{"firstName":"First Name","lastName":"Last Name"},"lightbox":{"openForm":"Open Form"},"likert":{"agree":"Agree","stronglyDisagree":"Strongly Disagree","disagree":"Disagree","stronglyAgree":"Strongly Agree","neutral":"Neutral"},"time":{"am":"AM","second":"Second","pm":"PM","minute":"Minute","amPm":"AM/PM","hour":"Hour"},"notFound":"Form not found.","date":{"yyyy":"YYYY","year":"Year","mm":"MM","day":"Day","month":"Month","dd":"DD"},"phone":{"country":"Country","number":"Number","prefix":"Prefix","areaCode":"Area Code","line":"Line"},"submitError":"Unable to submit form. Please try again later.","address":{"stateProvince":"State/Province","country":"Country","zipPostalCode":"Zip/Postal Code","address2":"Address 2","address1":"Address 1","city":"City"},"email":{"signUp":"Sign up for news and updates"},"cannotSubmitDemoForm":"This is a demo form and cannot be submitted.","required":"(required)","invalidData":"Invalid form data."}}};</script><script>Squarespace.load(window);</script>
+<link rel="alternate" type="application/rss+xml" title="RSS Feed" href="https://jack-vanlightly.com/analyses?format=rss" />
+<script type="application/ld+json">{"url":"https://jack-vanlightly.com","name":"Jack Vanlightly","description":"","@context":"http://schema.org","@type":"WebSite"}</script><script type="application/ld+json">{"name":"Change query support in Delta Lake (3.2.0) \u2014 Jack Vanlightly","url":"https://jack-vanlightly.com/analyses/2024/9/24/change-query-support-in-delta-lake","datePublished":"2024-09-24T16:05:34+0200","dateModified":"2024-09-27T14:03:53+0200","headline":"Change query support in Delta Lake (3.2.0)","author":"Jack Vanlightly","publisher":{"name":"Jack Vanlightly","logo":{"@type":"ImageObject"},"@context":"http://schema.org","@type":"Organization"},"image":"http://static1.squarespace.com/static/56894e581c1210fead06f878/t/66f28e47abc5947cf03bebed/1727172167468/DeltaLogSmall.png?format=1500w","@context":"http://schema.org","@type":"Article"}</script><link rel="stylesheet" type="text/css" href="https://static1.squarespace.com/static/sitecss/56894e581c1210fead06f878/82/52a74dafe4b073a80cd253c5/58161c73f7e0ab86f3c7deca/1054/site.css"/><meta name="google-site-verification" content="7YOpYadqgcwvgZB4FdOXOk6Ncy9genGABJy1FjE0kiQ" />
+<meta name="google-site-verification" content="7YOpYadqgcwvgZB4FdOXOk6Ncy9genGABJy1FjE0kiQ" />
+<style>
+.non-code-block
+{
+    background-color:#bfc0c1;
+    width:auto;
+    margin:5px;
+    padding:5px;
+  	border-radius: 5px;
+}
+</style>
+<style>
+/* http://prismjs.com/download.html?themes=prism-okaidia&languages=markup+css+clike+javascript+aspnet+csharp+fsharp+go+python+sql */
+/**
+ * okaidia theme for JavaScript, CSS and HTML
+ * Loosely based on Monokai textmate theme by http://www.monokai.nl/
+ * @author ocodia
+ */
+
+code[class*="language-"],
+pre[class*="language-"] {
+	color: #f8f8f2;
+	background: none;
+	text-shadow: 0 1px rgba(0, 0, 0, 0.3);
+	font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+	direction: ltr;
+	text-align: left;
+	white-space: pre;
+	word-spacing: normal;
+	word-break: normal;
+	word-wrap: normal;
+	line-height: 1.5;
+    font-size: 13px;
+
+	-moz-tab-size: 4;
+	-o-tab-size: 4;
+	tab-size: 4;
+
+	-webkit-hyphens: none;
+	-moz-hyphens: none;
+	-ms-hyphens: none;
+	hyphens: none;
+}
+
+/* Code blocks */
+pre[class*="language-"] {
+	padding: 1em;
+	margin: .5em 0;
+	overflow: auto;
+	border-radius: 0.3em;
+}
+
+:not(pre) > code[class*="language-"],
+pre[class*="language-"] {
+	background: #272822;
+}
+
+/* Inline code */
+:not(pre) > code[class*="language-"] {
+	padding: .1em;
+	border-radius: .3em;
+	white-space: normal;
+}
+
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+	color: slategray;
+}
+
+.token.punctuation {
+	color: #f8f8f2;
+}
+
+.namespace {
+	opacity: .7;
+}
+
+.token.property,
+.token.tag,
+.token.constant,
+.token.symbol,
+.token.deleted {
+	color: #f92672;
+}
+
+.token.boolean,
+.token.number {
+	color: #ae81ff;
+}
+
+.token.selector,
+.token.attr-name,
+.token.string,
+.token.char,
+.token.builtin,
+.token.inserted {
+	color: #a6e22e;
+}
+
+.token.operator,
+.token.entity,
+.token.url,
+.language-css .token.string,
+.style .token.string,
+.token.variable {
+	color: #f8f8f2;
+}
+
+.token.atrule,
+.token.attr-value,
+.token.function {
+	color: #e6db74;
+}
+
+.token.keyword {
+	color: #66d9ef;
+}
+
+.token.regex,
+.token.important {
+	color: #fd971f;
+}
+
+.token.important,
+.token.bold {
+	font-weight: bold;
+}
+.token.italic {
+	font-style: italic;
+}
+
+.token.entity {
+	cursor: help;
+}
+</style>
+<script>
+/* http://prismjs.com/download.html?themes=prism-dark&languages=markup+css+clike+javascript+aspnet+csharp+fsharp+go+python+sql */
+var _self="undefined"!=typeof window?window:"undefined"!=typeof WorkerGlobalScope&&self instanceof WorkerGlobalScope?self:{},Prism=function(){var e=/\blang(?:uage)?-(\w+)\b/i,t=0,n=_self.Prism={util:{encode:function(e){return e instanceof a?new a(e.type,n.util.encode(e.content),e.alias):"Array"===n.util.type(e)?e.map(n.util.encode):e.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/\u00a0/g," ")},type:function(e){return Object.prototype.toString.call(e).match(/\[object (\w+)\]/)[1]},objId:function(e){return e.__id||Object.defineProperty(e,"__id",{value:++t}),e.__id},clone:function(e){var t=n.util.type(e);switch(t){case"Object":var a={};for(var r in e)e.hasOwnProperty(r)&&(a[r]=n.util.clone(e[r]));return a;case"Array":return e.map&&e.map(function(e){return n.util.clone(e)})}return e}},languages:{extend:function(e,t){var a=n.util.clone(n.languages[e]);for(var r in t)a[r]=t[r];return a},insertBefore:function(e,t,a,r){r=r||n.languages;var i=r[e];if(2==arguments.length){a=arguments[1];for(var l in a)a.hasOwnProperty(l)&&(i[l]=a[l]);return i}var o={};for(var s in i)if(i.hasOwnProperty(s)){if(s==t)for(var l in a)a.hasOwnProperty(l)&&(o[l]=a[l]);o[s]=i[s]}return n.languages.DFS(n.languages,function(t,n){n===r[e]&&t!=e&&(this[t]=o)}),r[e]=o},DFS:function(e,t,a,r){r=r||{};for(var i in e)e.hasOwnProperty(i)&&(t.call(e,i,e[i],a||i),"Object"!==n.util.type(e[i])||r[n.util.objId(e[i])]?"Array"!==n.util.type(e[i])||r[n.util.objId(e[i])]||(r[n.util.objId(e[i])]=!0,n.languages.DFS(e[i],t,i,r)):(r[n.util.objId(e[i])]=!0,n.languages.DFS(e[i],t,null,r)))}},plugins:{},highlightAll:function(e,t){for(var a,r=document.querySelectorAll('code[class*="language-"], [class*="language-"] code, code[class*="lang-"], [class*="lang-"] code'),i=0;a=r[i++];)n.highlightElement(a,e===!0,t)},highlightElement:function(t,a,r){for(var i,l,o=t;o&&!e.test(o.className);)o=o.parentNode;o&&(i=(o.className.match(e)||[,""])[1],l=n.languages[i]),t.className=t.className.replace(e,"").replace(/\s+/g," ")+" language-"+i,o=t.parentNode,/pre/i.test(o.nodeName)&&(o.className=o.className.replace(e,"").replace(/\s+/g," ")+" language-"+i);var s=t.textContent,u={element:t,language:i,grammar:l,code:s};if(!s||!l)return n.hooks.run("complete",u),void 0;if(n.hooks.run("before-highlight",u),a&&_self.Worker){var c=new Worker(n.filename);c.onmessage=function(e){u.highlightedCode=e.data,n.hooks.run("before-insert",u),u.element.innerHTML=u.highlightedCode,r&&r.call(u.element),n.hooks.run("after-highlight",u),n.hooks.run("complete",u)},c.postMessage(JSON.stringify({language:u.language,code:u.code,immediateClose:!0}))}else u.highlightedCode=n.highlight(u.code,u.grammar,u.language),n.hooks.run("before-insert",u),u.element.innerHTML=u.highlightedCode,r&&r.call(t),n.hooks.run("after-highlight",u),n.hooks.run("complete",u)},highlight:function(e,t,r){var i=n.tokenize(e,t);return a.stringify(n.util.encode(i),r)},tokenize:function(e,t){var a=n.Token,r=[e],i=t.rest;if(i){for(var l in i)t[l]=i[l];delete t.rest}e:for(var l in t)if(t.hasOwnProperty(l)&&t[l]){var o=t[l];o="Array"===n.util.type(o)?o:[o];for(var s=0;s<o.length;++s){var u=o[s],c=u.inside,g=!!u.lookbehind,f=0,h=u.alias;u=u.pattern||u;for(var p=0;p<r.length;p++){var d=r[p];if(r.length>e.length)break e;if(!(d instanceof a)){u.lastIndex=0;var m=u.exec(d);if(m){g&&(f=m[1].length);var y=m.index-1+f,m=m[0].slice(f),v=m.length,b=y+v,k=d.slice(0,y+1),w=d.slice(b+1),_=[p,1];k&&_.push(k);var P=new a(l,c?n.tokenize(m,c):m,h);_.push(P),w&&_.push(w),Array.prototype.splice.apply(r,_)}}}}}return r},hooks:{all:{},add:function(e,t){var a=n.hooks.all;a[e]=a[e]||[],a[e].push(t)},run:function(e,t){var a=n.hooks.all[e];if(a&&a.length)for(var r,i=0;r=a[i++];)r(t)}}},a=n.Token=function(e,t,n){this.type=e,this.content=t,this.alias=n};if(a.stringify=function(e,t,r){if("string"==typeof e)return e;if("Array"===n.util.type(e))return e.map(function(n){return a.stringify(n,t,e)}).join("");var i={type:e.type,content:a.stringify(e.content,t,r),tag:"span",classes:["token",e.type],attributes:{},language:t,parent:r};if("comment"==i.type&&(i.attributes.spellcheck="true"),e.alias){var l="Array"===n.util.type(e.alias)?e.alias:[e.alias];Array.prototype.push.apply(i.classes,l)}n.hooks.run("wrap",i);var o="";for(var s in i.attributes)o+=(o?" ":"")+s+'="'+(i.attributes[s]||"")+'"';return"<"+i.tag+' class="'+i.classes.join(" ")+'" '+o+">"+i.content+"</"+i.tag+">"},!_self.document)return _self.addEventListener?(_self.addEventListener("message",function(e){var t=JSON.parse(e.data),a=t.language,r=t.code,i=t.immediateClose;_self.postMessage(n.highlight(r,n.languages[a],a)),i&&_self.close()},!1),_self.Prism):_self.Prism;var r=document.currentScript||[].slice.call(document.getElementsByTagName("script")).pop();return r&&(n.filename=r.src,document.addEventListener&&!r.hasAttribute("data-manual")&&document.addEventListener("DOMContentLoaded",n.highlightAll)),_self.Prism}();"undefined"!=typeof module&&module.exports&&(module.exports=Prism),"undefined"!=typeof global&&(global.Prism=Prism);
+Prism.languages.markup={comment:/<!--[\w\W]*?-->/,prolog:/<\?[\w\W]+?\?>/,doctype:/<!DOCTYPE[\w\W]+?>/,cdata:/<!\[CDATA\[[\w\W]*?]]>/i,tag:{pattern:/<\/?(?!\d)[^\s>\/=.$<]+(?:\s+[^\s>\/=]+(?:=(?:("|')(?:\\\1|\\?(?!\1)[\w\W])*\1|[^\s'">=]+))?)*\s*\/?>/i,inside:{tag:{pattern:/^<\/?[^\s>\/]+/i,inside:{punctuation:/^<\/?/,namespace:/^[^\s>\/:]+:/}},"attr-value":{pattern:/=(?:('|")[\w\W]*?(\1)|[^\s>]+)/i,inside:{punctuation:/[=>"']/}},punctuation:/\/?>/,"attr-name":{pattern:/[^\s>\/]+/,inside:{namespace:/^[^\s>\/:]+:/}}}},entity:/&#?[\da-z]{1,8};/i},Prism.hooks.add("wrap",function(a){"entity"===a.type&&(a.attributes.title=a.content.replace(/&amp;/,"&"))}),Prism.languages.xml=Prism.languages.markup,Prism.languages.html=Prism.languages.markup,Prism.languages.mathml=Prism.languages.markup,Prism.languages.svg=Prism.languages.markup;
+Prism.languages.css={comment:/\/\*[\w\W]*?\*\//,atrule:{pattern:/@[\w-]+?.*?(;|(?=\s*\{))/i,inside:{rule:/@[\w-]+/}},url:/url\((?:(["'])(\\(?:\r\n|[\w\W])|(?!\1)[^\\\r\n])*\1|.*?)\)/i,selector:/[^\{\}\s][^\{\};]*?(?=\s*\{)/,string:/("|')(\\(?:\r\n|[\w\W])|(?!\1)[^\\\r\n])*\1/,property:/(\b|\B)[\w-]+(?=\s*:)/i,important:/\B!important\b/i,"function":/[-a-z0-9]+(?=\()/i,punctuation:/[(){};:]/},Prism.languages.css.atrule.inside.rest=Prism.util.clone(Prism.languages.css),Prism.languages.markup&&(Prism.languages.insertBefore("markup","tag",{style:{pattern:/(<style[\w\W]*?>)[\w\W]*?(?=<\/style>)/i,lookbehind:!0,inside:Prism.languages.css,alias:"language-css"}}),Prism.languages.insertBefore("inside","attr-value",{"style-attr":{pattern:/\s*style=("|').*?\1/i,inside:{"attr-name":{pattern:/^\s*style/i,inside:Prism.languages.markup.tag.inside},punctuation:/^\s*=\s*['"]|['"]\s*$/,"attr-value":{pattern:/.+/i,inside:Prism.languages.css}},alias:"language-css"}},Prism.languages.markup.tag));
+Prism.languages.clike={comment:[{pattern:/(^|[^\\])\/\*[\w\W]*?\*\//,lookbehind:!0},{pattern:/(^|[^\\:])\/\/.*/,lookbehind:!0}],string:/(["'])(\\(?:\r\n|[\s\S])|(?!\1)[^\\\r\n])*\1/,"class-name":{pattern:/((?:\b(?:class|interface|extends|implements|trait|instanceof|new)\s+)|(?:catch\s+\())[a-z0-9_\.\\]+/i,lookbehind:!0,inside:{punctuation:/(\.|\\)/}},keyword:/\b(if|else|while|do|for|return|in|instanceof|function|new|try|throw|catch|finally|null|break|continue)\b/,"boolean":/\b(true|false)\b/,"function":/[a-z0-9_]+(?=\()/i,number:/\b-?(?:0x[\da-f]+|\d*\.?\d+(?:e[+-]?\d+)?)\b/i,operator:/--?|\+\+?|!=?=?|<=?|>=?|==?=?|&&?|\|\|?|\?|\*|\/|~|\^|%/,punctuation:/[{}[\];(),.:]/};
+Prism.languages.javascript=Prism.languages.extend("clike",{keyword:/\b(as|async|await|break|case|catch|class|const|continue|debugger|default|delete|do|else|enum|export|extends|finally|for|from|function|get|if|implements|import|in|instanceof|interface|let|new|null|of|package|private|protected|public|return|set|static|super|switch|this|throw|try|typeof|var|void|while|with|yield)\b/,number:/\b-?(0x[\dA-Fa-f]+|0b[01]+|0o[0-7]+|\d*\.?\d+([Ee][+-]?\d+)?|NaN|Infinity)\b/,"function":/[_$a-zA-Z\xA0-\uFFFF][_$a-zA-Z0-9\xA0-\uFFFF]*(?=\()/i}),Prism.languages.insertBefore("javascript","keyword",{regex:{pattern:/(^|[^\/])\/(?!\/)(\[.+?]|\\.|[^\/\\\r\n])+\/[gimyu]{0,5}(?=\s*($|[\r\n,.;})]))/,lookbehind:!0}}),Prism.languages.insertBefore("javascript","class-name",{"template-string":{pattern:/`(?:\\`|\\?[^`])*`/,inside:{interpolation:{pattern:/\$\{[^}]+\}/,inside:{"interpolation-punctuation":{pattern:/^\$\{|\}$/,alias:"punctuation"},rest:Prism.languages.javascript}},string:/[\s\S]+/}}}),Prism.languages.markup&&Prism.languages.insertBefore("markup","tag",{script:{pattern:/(<script[\w\W]*?>)[\w\W]*?(?=<\/script>)/i,lookbehind:!0,inside:Prism.languages.javascript,alias:"language-javascript"}}),Prism.languages.js=Prism.languages.javascript;
+Prism.languages.aspnet=Prism.languages.extend("markup",{"page-directive tag":{pattern:/<%\s*@.*%>/i,inside:{"page-directive tag":/<%\s*@\s*(?:Assembly|Control|Implements|Import|Master(?:Type)?|OutputCache|Page|PreviousPageType|Reference|Register)?|%>/i,rest:Prism.languages.markup.tag.inside}},"directive tag":{pattern:/<%.*%>/i,inside:{"directive tag":/<%\s*?[$=%#:]{0,2}|%>/i,rest:Prism.languages.csharp}}}),Prism.languages.aspnet.tag.pattern=/<(?!%)\/?[^\s>\/]+(?:\s+[^\s>\/=]+(?:=(?:("|')(?:\\\1|\\?(?!\1)[\w\W])*\1|[^\s'">=]+))?)*\s*\/?>/i,Prism.languages.insertBefore("inside","punctuation",{"directive tag":Prism.languages.aspnet["directive tag"]},Prism.languages.aspnet.tag.inside["attr-value"]),Prism.languages.insertBefore("aspnet","comment",{"asp comment":/<%--[\w\W]*?--%>/}),Prism.languages.insertBefore("aspnet",Prism.languages.javascript?"script":"tag",{"asp script":{pattern:/(<script(?=.*runat=['"]?server['"]?)[\w\W]*?>)[\w\W]*?(?=<\/script>)/i,lookbehind:!0,inside:Prism.languages.csharp||{}}});
+Prism.languages.csharp=Prism.languages.extend("clike",{keyword:/\b(abstract|as|async|await|base|bool|break|byte|case|catch|char|checked|class|const|continue|decimal|default|delegate|do|double|else|enum|event|explicit|extern|false|finally|fixed|float|for|foreach|goto|if|implicit|in|int|interface|internal|is|lock|long|namespace|new|null|object|operator|out|override|params|private|protected|public|readonly|ref|return|sbyte|sealed|short|sizeof|stackalloc|static|string|struct|switch|this|throw|true|try|typeof|uint|ulong|unchecked|unsafe|ushort|using|virtual|void|volatile|while|add|alias|ascending|async|await|descending|dynamic|from|get|global|group|into|join|let|orderby|partial|remove|select|set|value|var|where|yield)\b/,string:[/@("|')(\1\1|\\\1|\\?(?!\1)[\s\S])*\1/,/("|')(\\?.)*?\1/],number:/\b-?(0x[\da-f]+|\d*\.?\d+f?)\b/i}),Prism.languages.insertBefore("csharp","keyword",{preprocessor:{pattern:/(^\s*)#.*/m,lookbehind:!0,alias:"property",inside:{directive:{pattern:/(\s*#)\b(define|elif|else|endif|endregion|error|if|line|pragma|region|undef|warning)\b/,lookbehind:!0,alias:"keyword"}}}});
+Prism.languages.fsharp=Prism.languages.extend("clike",{comment:[{pattern:/(^|[^\\])\(\*[\w\W]*?\*\)/,lookbehind:!0},{pattern:/(^|[^\\:])\/\/.*/,lookbehind:!0}],keyword:/\b(?:let|return|use|yield)(?:!\B|\b)|\b(abstract|and|as|assert|base|begin|class|default|delegate|do|done|downcast|downto|elif|else|end|exception|extern|false|finally|for|fun|function|global|if|in|inherit|inline|interface|internal|lazy|match|member|module|mutable|namespace|new|not|null|of|open|or|override|private|public|rec|select|static|struct|then|to|true|try|type|upcast|val|void|when|while|with|asr|land|lor|lsl|lsr|lxor|mod|sig|atomic|break|checked|component|const|constraint|constructor|continue|eager|event|external|fixed|functor|include|method|mixin|object|parallel|process|protected|pure|sealed|tailcall|trait|virtual|volatile)\b/,string:/(?:"""[\s\S]*?"""|@"(?:""|[^"])*"|("|')(?:\\\1|\\?(?!\1)[\s\S])*\1)B?/,number:[/\b-?0x[\da-fA-F]+(un|lf|LF)?\b/,/\b-?0b[01]+(y|uy)?\b/,/\b-?(\d*\.?\d+|\d+\.)([fFmM]|[eE][+-]?\d+)?\b/,/\b-?\d+(y|uy|s|us|l|u|ul|L|UL|I)?\b/]}),Prism.languages.insertBefore("fsharp","keyword",{preprocessor:{pattern:/^[^\r\n\S]*#.*/m,alias:"property",inside:{directive:{pattern:/(\s*#)\b(else|endif|if|light|line|nowarn)\b/,lookbehind:!0,alias:"keyword"}}}});
+Prism.languages.go=Prism.languages.extend("clike",{keyword:/\b(break|case|chan|const|continue|default|defer|else|fallthrough|for|func|go(to)?|if|import|interface|map|package|range|return|select|struct|switch|type|var)\b/,builtin:/\b(bool|byte|complex(64|128)|error|float(32|64)|rune|string|u?int(8|16|32|64|)|uintptr|append|cap|close|complex|copy|delete|imag|len|make|new|panic|print(ln)?|real|recover)\b/,"boolean":/\b(_|iota|nil|true|false)\b/,operator:/[*\/%^!=]=?|\+[=+]?|-[=-]?|\|[=|]?|&(?:=|&|\^=?)?|>(?:>=?|=)?|<(?:<=?|=|-)?|:=|\.\.\./,number:/\b(-?(0x[a-f\d]+|(\d+\.?\d*|\.\d+)(e[-+]?\d+)?)i?)\b/i,string:/("|'|`)(\\?.|\r|\n)*?\1/}),delete Prism.languages.go["class-name"];
+Prism.languages.python={"triple-quoted-string":{pattern:/"""[\s\S]+?"""|'''[\s\S]+?'''/,alias:"string"},comment:{pattern:/(^|[^\\])#.*/,lookbehind:!0},string:/("|')(?:\\?.)*?\1/,"function":{pattern:/((?:^|\s)def[ \t]+)[a-zA-Z_][a-zA-Z0-9_]*(?=\()/g,lookbehind:!0},"class-name":{pattern:/(\bclass\s+)[a-z0-9_]+/i,lookbehind:!0},keyword:/\b(?:as|assert|async|await|break|class|continue|def|del|elif|else|except|exec|finally|for|from|global|if|import|in|is|lambda|pass|print|raise|return|try|while|with|yield)\b/,"boolean":/\b(?:True|False)\b/,number:/\b-?(?:0[bo])?(?:(?:\d|0x[\da-f])[\da-f]*\.?\d*|\.\d+)(?:e[+-]?\d+)?j?\b/i,operator:/[-+%=]=?|!=|\*\*?=?|\/\/?=?|<[<=>]?|>[=>]?|[&|^~]|\b(?:or|and|not)\b/,punctuation:/[{}[\];(),.:]/};
+Prism.languages.sql={comment:{pattern:/(^|[^\\])(?:\/\*[\w\W]*?\*\/|(?:--|\/\/|#).*)/,lookbehind:!0},string:{pattern:/(^|[^@\\])("|')(?:\\?[\s\S])*?\2/,lookbehind:!0},variable:/@[\w.$]+|@("|'|`)(?:\\?[\s\S])+?\1/,"function":/\b(?:COUNT|SUM|AVG|MIN|MAX|FIRST|LAST|UCASE|LCASE|MID|LEN|ROUND|NOW|FORMAT)(?=\s*\()/i,keyword:/\b(?:ACTION|ADD|AFTER|ALGORITHM|ALL|ALTER|ANALYZE|ANY|APPLY|AS|ASC|AUTHORIZATION|BACKUP|BDB|BEGIN|BERKELEYDB|BIGINT|BINARY|BIT|BLOB|BOOL|BOOLEAN|BREAK|BROWSE|BTREE|BULK|BY|CALL|CASCADED?|CASE|CHAIN|CHAR VARYING|CHARACTER (?:SET|VARYING)|CHARSET|CHECK|CHECKPOINT|CLOSE|CLUSTERED|COALESCE|COLLATE|COLUMN|COLUMNS|COMMENT|COMMIT|COMMITTED|COMPUTE|CONNECT|CONSISTENT|CONSTRAINT|CONTAINS|CONTAINSTABLE|CONTINUE|CONVERT|CREATE|CROSS|CURRENT(?:_DATE|_TIME|_TIMESTAMP|_USER)?|CURSOR|DATA(?:BASES?)?|DATETIME|DBCC|DEALLOCATE|DEC|DECIMAL|DECLARE|DEFAULT|DEFINER|DELAYED|DELETE|DENY|DESC|DESCRIBE|DETERMINISTIC|DISABLE|DISCARD|DISK|DISTINCT|DISTINCTROW|DISTRIBUTED|DO|DOUBLE(?: PRECISION)?|DROP|DUMMY|DUMP(?:FILE)?|DUPLICATE KEY|ELSE|ENABLE|ENCLOSED BY|END|ENGINE|ENUM|ERRLVL|ERRORS|ESCAPE(?:D BY)?|EXCEPT|EXEC(?:UTE)?|EXISTS|EXIT|EXPLAIN|EXTENDED|FETCH|FIELDS|FILE|FILLFACTOR|FIRST|FIXED|FLOAT|FOLLOWING|FOR(?: EACH ROW)?|FORCE|FOREIGN|FREETEXT(?:TABLE)?|FROM|FULL|FUNCTION|GEOMETRY(?:COLLECTION)?|GLOBAL|GOTO|GRANT|GROUP|HANDLER|HASH|HAVING|HOLDLOCK|IDENTITY(?:_INSERT|COL)?|IF|IGNORE|IMPORT|INDEX|INFILE|INNER|INNODB|INOUT|INSERT|INT|INTEGER|INTERSECT|INTO|INVOKER|ISOLATION LEVEL|JOIN|KEYS?|KILL|LANGUAGE SQL|LAST|LEFT|LIMIT|LINENO|LINES|LINESTRING|LOAD|LOCAL|LOCK|LONG(?:BLOB|TEXT)|MATCH(?:ED)?|MEDIUM(?:BLOB|INT|TEXT)|MERGE|MIDDLEINT|MODIFIES SQL DATA|MODIFY|MULTI(?:LINESTRING|POINT|POLYGON)|NATIONAL(?: CHAR VARYING| CHARACTER(?: VARYING)?| VARCHAR)?|NATURAL|NCHAR(?: VARCHAR)?|NEXT|NO(?: SQL|CHECK|CYCLE)?|NONCLUSTERED|NULLIF|NUMERIC|OFF?|OFFSETS?|ON|OPEN(?:DATASOURCE|QUERY|ROWSET)?|OPTIMIZE|OPTION(?:ALLY)?|ORDER|OUT(?:ER|FILE)?|OVER|PARTIAL|PARTITION|PERCENT|PIVOT|PLAN|POINT|POLYGON|PRECEDING|PRECISION|PREV|PRIMARY|PRINT|PRIVILEGES|PROC(?:EDURE)?|PUBLIC|PURGE|QUICK|RAISERROR|READ(?:S SQL DATA|TEXT)?|REAL|RECONFIGURE|REFERENCES|RELEASE|RENAME|REPEATABLE|REPLICATION|REQUIRE|RESTORE|RESTRICT|RETURNS?|REVOKE|RIGHT|ROLLBACK|ROUTINE|ROW(?:COUNT|GUIDCOL|S)?|RTREE|RULE|SAVE(?:POINT)?|SCHEMA|SELECT|SERIAL(?:IZABLE)?|SESSION(?:_USER)?|SET(?:USER)?|SHARE MODE|SHOW|SHUTDOWN|SIMPLE|SMALLINT|SNAPSHOT|SOME|SONAME|START(?:ING BY)?|STATISTICS|STATUS|STRIPED|SYSTEM_USER|TABLES?|TABLESPACE|TEMP(?:ORARY|TABLE)?|TERMINATED BY|TEXT(?:SIZE)?|THEN|TIMESTAMP|TINY(?:BLOB|INT|TEXT)|TOP?|TRAN(?:SACTIONS?)?|TRIGGER|TRUNCATE|TSEQUAL|TYPES?|UNBOUNDED|UNCOMMITTED|UNDEFINED|UNION|UNIQUE|UNPIVOT|UPDATE(?:TEXT)?|USAGE|USE|USER|USING|VALUES?|VAR(?:BINARY|CHAR|CHARACTER|YING)|VIEW|WAITFOR|WARNINGS|WHEN|WHERE|WHILE|WITH(?: ROLLUP|IN)?|WORK|WRITE(?:TEXT)?)\b/i,"boolean":/\b(?:TRUE|FALSE|NULL)\b/i,number:/\b-?(?:0x)?\d*\.?[\da-f]+\b/,operator:/[-+*\/=%^~]|&&?|\|?\||!=?|<(?:=>?|<|>)?|>[>=]?|\b(?:AND|BETWEEN|IN|LIKE|NOT|OR|IS|DIV|REGEXP|RLIKE|SOUNDS LIKE|XOR)\b/i,punctuation:/[;[\]()`,.]/};
+</script><script>Static.COOKIE_BANNER_CAPABLE = true;</script>
+<!-- End of Squarespace Headers -->
+    <script>/* Must be below squarespace-headers */(function(){var e='ontouchstart'in window||navigator.msMaxTouchPoints;var t=document.documentElement;if(!e&&t){t.className=t.className.replace(/touch-styles/,'')}})()
+    </script>
+  </head>
+  <body id="item-66f28d52e8443b353c2f24ba" class="transparent-header enable-nav-button nav-button-style-outline nav-button-corner-style-pill banner-button-style-solid banner-button-corner-style-pill banner-slideshow-controls-arrows meta-priority-date   hide-list-entry-footer     center-navigation--info    event-show-past-events event-thumbnails event-thumbnail-size-32-standard event-date-label  event-list-show-cats event-list-date event-list-time event-list-address   event-icalgcal-links  event-excerpts      gallery-design-grid aspect-ratio-auto lightbox-style-light gallery-navigation-bullets gallery-info-overlay-show-on-hover gallery-aspect-ratio-32-standard gallery-arrow-style-no-background gallery-transitions-fade gallery-show-arrows gallery-auto-crop   product-list-titles-under product-list-alignment-center product-item-size-11-square product-image-auto-crop product-gallery-size-11-square  show-product-price show-product-item-nav product-social-sharing tweak-v1-related-products-image-aspect-ratio-11-square tweak-v1-related-products-details-alignment-center newsletter-style-light hide-opentable-icons opentable-style-dark small-button-style-solid small-button-shape-square medium-button-style-solid medium-button-shape-square large-button-style-solid large-button-shape-square image-block-poster-text-alignment-center image-block-card-dynamic-font-sizing image-block-card-content-position-center image-block-card-text-alignment-left image-block-overlap-dynamic-font-sizing image-block-overlap-content-position-center image-block-overlap-text-alignment-left image-block-collage-dynamic-font-sizing image-block-collage-content-position-top image-block-collage-text-alignment-left image-block-stack-dynamic-font-sizing image-block-stack-text-alignment-left button-style-solid button-corner-style-square tweak-product-quick-view-button-style-floating tweak-product-quick-view-button-position-bottom tweak-product-quick-view-lightbox-excerpt-display-truncate tweak-product-quick-view-lightbox-show-arrows tweak-product-quick-view-lightbox-show-close-button tweak-product-quick-view-lightbox-controls-weight-light native-currency-code-usd collection-638cdc03652c7d3aa50eea6d view-item collection-type-blog collection-layout-default mobile-style-available">
+    <div class="body-overlay"></div>
+    <div class="sqs-announcement-bar-dropzone"></div>
+    <div id="sidecarNav">
+      
+
+  <div id="mobileNavWrapper" class="nav-wrapper" data-content-field="navigation-mobileNav">
+    <nav id="mobileNavigation">
+      
+
+      
+        
+          
+
+          
+
+            
+            <div class="collection active">
+              <a href="/analyses">
+                Analyses
+              </a>
+            </div>
+            
+
+          
+        
+        
+
+      
+        
+          
+
+          
+
+            
+            <div class="collection">
+              <a href="/analysis-archive">
+                Analysis Archive
+              </a>
+            </div>
+            
+
+          
+        
+        
+
+      
+        
+          
+
+          
+
+            
+            <div class="collection homepage">
+              <a href="/">
+                Blog
+              </a>
+            </div>
+            
+
+          
+        
+        
+
+      
+        
+          
+
+          
+
+            
+            <div class="collection">
+              <a href="/blog-archive">
+                Blog Archive
+              </a>
+            </div>
+            
+
+          
+        
+        
+
+      
+        
+          
+
+          
+
+            
+            <div class="collection">
+              <a href="/sketches">
+                Sketches
+              </a>
+            </div>
+            
+
+          
+        
+        
+
+      
+        
+          
+
+          
+
+            
+            <div class="collection">
+              <a href="/home">
+                About Me
+              </a>
+            </div>
+            
+
+          
+        
+        
+
+      
+    </nav>
+  </div>
+
+
+
+    </div>
+    <div id="siteWrapper" class="clearfix">
+
+      <div class="sqs-cart-dropzone"></div>
+
+      <header id="header" class="show-on-scroll" data-offset-el=".index-section" data-offset-behavior="bottom" role="banner">
+        <div class="header-inner">
+          <div id="siteTitleWrapper" class="wrapper" data-content-field="site-title">
+            
+              <h1 id="siteTitle" class="site-title"><a href="/">Jack Vanlightly</a></h1>
+            
+          </div><!--
+          --><div class="mobile-nav-toggle"><div class="top-bar"></div><div class="middle-bar"></div><div class="bottom-bar"></div></div><div class="mobile-nav-toggle fixed-nav-toggle"><div class="top-bar"></div><div class="middle-bar"></div><div class="bottom-bar"></div></div><!--
+          --><div id="headerNav">
+
+  <div id="mainNavWrapper" class="nav-wrapper" data-content-field="navigation-mainNav">
+    <nav id="mainNavigation" data-content-field="navigation-mainNav">
+      
+
+      
+        
+          
+
+          
+
+            
+            <div class="collection active">
+              <a href="/analyses">
+                Analyses
+              </a>
+            </div>
+            
+
+          
+        
+        
+
+      
+        
+          
+
+          
+
+            
+            <div class="collection">
+              <a href="/analysis-archive">
+                Analysis Archive
+              </a>
+            </div>
+            
+
+          
+        
+        
+
+      
+        
+          
+
+          
+
+            
+            <div class="collection homepage">
+              <a href="/">
+                Blog
+              </a>
+            </div>
+            
+
+          
+        
+        
+
+      
+        
+          
+
+          
+
+            
+            <div class="collection">
+              <a href="/blog-archive">
+                Blog Archive
+              </a>
+            </div>
+            
+
+          
+        
+        
+
+      
+        
+          
+
+          
+
+            
+            <div class="collection">
+              <a href="/sketches">
+                Sketches
+              </a>
+            </div>
+            
+
+          
+        
+        
+
+      
+        
+          
+
+          
+
+            
+            <div class="collection">
+              <a href="/home">
+                About Me
+              </a>
+            </div>
+            
+
+          
+        
+        
+
+      
+    </nav>
+  </div>
+  <!-- style below blocks out the mobile nav toggle only when nav is loaded -->
+  <style>.mobile-nav-toggle-label { display: inline-block !important; }</style>
+
+
+</div>
+        </div>
+      </header>
+
+      
+        
+          
+            
+              
+            
+          
+        
+      
+
+
+      
+      
+      
+
+      <main id="page" role="main">
+        
+        <!--
+        --><!--
+        --><div id="content" class="main-content" data-content-field="main-content" data-collection-id="638cdc03652c7d3aa50eea6d" data-edit-main-image="">
+         <div class="blog-item">
+
+  
+  <article class="entry h-entry hentry category-table-formats author-jack-vanlightly post-type-text clear" id="article-66f28d52e8443b353c2f24ba" data-item-id="66f28d52e8443b353c2f24ba">
+
+    <header class="entry-header">
+      <div class="meta-above-title">
+        
+        <div class="entry-byline">
+          <span class="entry-author"><a href="/analyses?author=56894e5669a91ac1e4c9ec1b" class="p-author author entry-byline-link" rel="author">Jack Vanlightly</a></span>
+        </div>
+        
+        <div class="entry-dateline">
+          <time class="dt-published published entry-date" datetime="2024-09-24" pubdate><a href="/analyses/2024/9/24/change-query-support-in-delta-lake" class="entry-dateline-link">September 24, 2024</a></time>
+          <time class="dt-updated updated" datetime="2024-09-27"></time>
+        </div>
+        
+        <div class="entry-morefrom">
+          <span class="entry-category"><a href="/analyses/category/Table+formats" class="entry-morefrom-link" rel="tag">Table formats</a></span>
+        </div>
+        
+      </div>
+      <h1 data-content-field="title" class="entry-title p-name">
+      
+        <a href="/analyses/2024/9/24/change-query-support-in-delta-lake" class="u-url" rel="bookmark">Change query support in Delta Lake (3.2.0)</a>
+      
+      </h1>
+      <div class="meta-below-title ">
+        
+        <div class="entry-byline">
+          <span class="entry-author"><a href="/analyses?author=56894e5669a91ac1e4c9ec1b" class="p-author author entry-byline-link" rel="author">Jack Vanlightly</a></span>
+        </div>
+        
+        <div class="entry-dateline">
+          <time class="dt-published published entry-date" datetime="2024-09-24" pubdate><a href="/analyses/2024/9/24/change-query-support-in-delta-lake" class="entry-dateline-link">September 24, 2024</a></time>
+          <time class="dt-updated updated" datetime="2024-09-27"></time>
+        </div>
+        
+        <div class="entry-morefrom">
+          <span class="entry-category"><a href="/analyses/category/Table+formats" class="entry-morefrom-link" rel="tag">Table formats</a></span>
+        </div>
+        
+      </div>
+    </header>
+
+    <div class="entry-content e-content">
+      
+        <div class="sqs-layout sqs-grid-12 columns-12" data-layout-label="Post Body" data-type="item" data-updated-on="1727171919618" id="item-66f28d52e8443b353c2f24ba"><div class="row sqs-row"><div class="col sqs-col-12 span-12"><div class="sqs-block html-block sqs-block-html" data-block-type="2" data-sqsp-block="text" id="block-063ef6875396ace1c27e"><div class="sqs-block-content">
+
+<div class="sqs-html-content" data-sqsp-text-block-content>
+  <p class="" style="white-space:pre-wrap;">This is the Delta Lake deep dive associated with the <a href="https://jack-vanlightly.com/blog/2024/9/19/table-format-comparisons-change-queries-and-cdc"><span style="text-decoration:underline">table format comparisons - Change queries and CDC</span></a> blog post, which looks at how each table format supports change queries tables, including full CDC. This is not a how-to guide but an examination of Delta Lake capabilities through the lens of its internal design.</p><h1 style="white-space:pre-wrap;">Preamble</h1><p class="" style="white-space:pre-wrap;">In the <a href="https://jack-vanlightly.com/blog/2024/9/19/table-format-comparisons-change-queries-and-cdc"><span style="text-decoration:underline">parent</span></a> blog post, I described four canonical change query types:</p><ul data-rte-list="default"><li><p class="" style="white-space:pre-wrap;">Latest-state</p></li><ul data-rte-list="default"><li><p class="" style="white-space:pre-wrap;"><strong>append-only</strong>: Return all inserted rows covering the query time period.</p></li><li><p class="" style="white-space:pre-wrap;"><strong>upsert</strong>: Return all inserted and updated rows (without the before image) covering the query time period. This may or may not return rows that were deleted in the time period; this will depend on the table format.</p></li></ul><li><p class="" style="white-space:pre-wrap;">CDC</p></li><ul data-rte-list="default"><li><p class="" style="white-space:pre-wrap;"><strong>min-delta</strong>: Minimized CDC results covering the query time period.</p></li><li><p class="" style="white-space:pre-wrap;"><strong>full-delta</strong>: Complete CDC results, including redundant changes, covering the query time period.</p></li></ul></ul><p class="" style="white-space:pre-wrap;">I took the <em>append-only </em>and <em>min-delta</em> names from this <a href="https://dl.acm.org/doi/pdf/10.1145/3589776"><span style="text-decoration:underline">incremental processing </span></a>Snowflake paper that describes how Snowflake change queries work. <em>Upsert</em> and <em>full-delta</em> are additional types that are not supported by Snowflake but have some support among the table formats. We’ll be framing the Delta capabilities in terms of those four change query types.</p><p class="" style="white-space:pre-wrap;">In the <a href="https://jack-vanlightly.com/blog/2024/9/19/table-format-comparisons-change-queries-and-cdc"><span style="text-decoration:underline">parent </span></a>post, I also covered the three main approaches to CDC support:</p><ul data-rte-list="default"><li><p class="" style="white-space:pre-wrap;">Materialize CDC files on write</p></li><li><p class="" style="white-space:pre-wrap;">Infer-CDC-on-read</p></li><li><p class="" style="white-space:pre-wrap;">Row-lineage (aka row tracking)</p></li></ul><p class="" style="white-space:pre-wrap;">Delta Lake supports incremental latest-state reads, called streaming reads in Spark Structured Streaming, and CDC reads, known as CDC feeds.</p><h1 style="white-space:pre-wrap;">Some relevant internals background</h1><p class="" style="white-space:pre-wrap;">As with the <a href="https://jack-vanlightly.com/analyses/2024/9/23/change-query-support-in-apache-iceberg-v2" target="_blank">Apache Iceberg post</a>, it’s useful to cover some relevant aspects of Delta Lake internals to understand the change query support.</p><h2 style="white-space:pre-wrap;">Incremental table scans</h2><p class="" style="white-space:pre-wrap;">Each table commit results in a new delta log entry being written to the Delta Log. Compute engines can incrementally process these entries of the log by sorting the entries in lexicographical order. Each entry that represents an update to data will contain at least one AddFile and/or DeleteFile action. If deletion vectors are enabled, then an AddFile action may contain the location of a deletion vector file as well as a data file.</p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+</div></div><div class="sqs-block image-block sqs-block-image" data-block-type="5" id="block-yui_3_17_2_1_1727171920708_1958"><div class="sqs-block-content">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+    
+  
+    <div
+        class="
+          image-block-outer-wrapper
+          layout-caption-below
+          design-layout-inline
+          combination-animation-none
+          individual-animation-none
+          individual-text-animation-none
+        "
+        data-test="image-block-inline-outer-wrapper"
+    >
+
+      
+
+      
+        <figure
+            class="
+              sqs-block-image-figure
+              intrinsic
+            "
+            style="max-width:900px;"
+        >
+          
+        
+        
+
+        
+          
+            <button
+                class="
+                  sqs-block-image-button
+                  lightbox
+                  
+          
+        
+                "
+                data-description="&lt;p&gt;&lt;em&gt;Fig 1. Compute engines can walk forwards through the delta log entries by sorting them lexicographically.&lt;/em&gt;&lt;/p&gt;"
+                data-lightbox-theme="dark"
+            >
+              <span class="v6-visually-hidden">View fullsize</span>
+              
+          <div
+              
+              
+              class="image-block-wrapper"
+              data-animation-role="image"
+              
+  
+
+          >
+            <div class="sqs-image-shape-container-element
+              
+          
+        
+              has-aspect-ratio
+            " style="
+                position: relative;
+                
+                  padding-bottom:53.5555534362793%;
+                
+                overflow: hidden;-webkit-mask-image: -webkit-radial-gradient(white, black);
+              "
+              >
+                
+                
+                
+                
+                
+                
+                
+                <img data-stretch="false" data-src="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/cd60317c-2fc6-4737-a95c-cfcf6b9d20c1/DeltaLogSmall.png" data-image="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/cd60317c-2fc6-4737-a95c-cfcf6b9d20c1/DeltaLogSmall.png" data-image-dimensions="900x482" data-image-focal-point="0.5,0.5" alt="" data-load="false" elementtiming="system-image-block"  src="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/cd60317c-2fc6-4737-a95c-cfcf6b9d20c1/DeltaLogSmall.png" width="900" height="482" alt="" sizes="(max-width: 640px) 100vw, (max-width: 767px) 100vw, 100vw" style="display:block;object-fit: cover; width: 100%; height: 100%; object-position: 50% 50%" onload="this.classList.add(&quot;loaded&quot;)" srcset="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/cd60317c-2fc6-4737-a95c-cfcf6b9d20c1/DeltaLogSmall.png?format=100w 100w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/cd60317c-2fc6-4737-a95c-cfcf6b9d20c1/DeltaLogSmall.png?format=300w 300w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/cd60317c-2fc6-4737-a95c-cfcf6b9d20c1/DeltaLogSmall.png?format=500w 500w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/cd60317c-2fc6-4737-a95c-cfcf6b9d20c1/DeltaLogSmall.png?format=750w 750w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/cd60317c-2fc6-4737-a95c-cfcf6b9d20c1/DeltaLogSmall.png?format=1000w 1000w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/cd60317c-2fc6-4737-a95c-cfcf6b9d20c1/DeltaLogSmall.png?format=1500w 1500w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/cd60317c-2fc6-4737-a95c-cfcf6b9d20c1/DeltaLogSmall.png?format=2500w 2500w" loading="lazy" decoding="async" data-loader="sqs">
+
+            </div>
+          </div>
+        
+            </button>
+          
+        
+
+        
+          
+          <figcaption class="image-caption-wrapper">
+            <div class="image-caption"><p><em>Fig 1. Compute engines can walk forwards through the delta log entries by sorting them lexicographically.</em></p></div>
+          </figcaption>
+        
+      
+        </figure>
+      
+
+    </div>
+  
+
+
+  
+
+
+</div></div><div class="sqs-block html-block sqs-block-html" data-block-type="2" data-sqsp-block="text" id="block-yui_3_17_2_1_1727171920708_2298"><div class="sqs-block-content">
+
+<div class="sqs-html-content" data-sqsp-text-block-content>
+  <h2 style="white-space:pre-wrap;">Copy-on-write vs merge-on-read</h2><p class="" style="white-space:pre-wrap;">Delta Lake has a lot in common with Apache Iceberg, including the general design around copy-on-write and merge-on-read. Copy-on-write works in the same way as Iceberg. Merge-on-read is also essentially the same; Iceberg’s positional delete files are very similar to Delta’s deletion vectors, though Delta does not support equality deletes.</p><p class="" style="white-space:pre-wrap;">In this deep dive we’ll be using the same set of three SQL commands repeatedly to understand change queries. The figures below show the simplified representation of the data, delete and metadata files of a copy-on-write (COW) table and a merge-on-read (MOR) table, undergoing these same three commands.</p><p class="" style="white-space:pre-wrap;"><strong>Copy-on-write example:</strong></p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+</div></div><div class="sqs-block image-block sqs-block-image" data-block-type="5" id="block-yui_3_17_2_1_1727171920708_7794"><div class="sqs-block-content">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+    
+  
+    <div
+        class="
+          image-block-outer-wrapper
+          layout-caption-below
+          design-layout-inline
+          combination-animation-none
+          individual-animation-none
+          individual-text-animation-none
+        "
+        data-test="image-block-inline-outer-wrapper"
+    >
+
+      
+
+      
+        <figure
+            class="
+              sqs-block-image-figure
+              intrinsic
+            "
+            style="max-width:1104px;"
+        >
+          
+        
+        
+
+        
+          
+            
+          <div
+              
+              
+              class="image-block-wrapper"
+              data-animation-role="image"
+              
+  
+
+          >
+            <div class="sqs-image-shape-container-element
+              
+          
+        
+              has-aspect-ratio
+            " style="
+                position: relative;
+                
+                  padding-bottom:55.43478012084961%;
+                
+                overflow: hidden;-webkit-mask-image: -webkit-radial-gradient(white, black);
+              "
+              >
+                
+                
+                
+                
+                
+                
+                
+                <img data-stretch="false" data-src="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/6d6745ad-29e2-4305-ba19-bd29a02d79f8/DeltaCOWSmall.png" data-image="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/6d6745ad-29e2-4305-ba19-bd29a02d79f8/DeltaCOWSmall.png" data-image-dimensions="1104x612" data-image-focal-point="0.5,0.5" alt="" data-load="false" elementtiming="system-image-block"  src="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/6d6745ad-29e2-4305-ba19-bd29a02d79f8/DeltaCOWSmall.png" width="1104" height="612" alt="" sizes="(max-width: 640px) 100vw, (max-width: 767px) 100vw, 100vw" style="display:block;object-fit: cover; width: 100%; height: 100%; object-position: 50% 50%" onload="this.classList.add(&quot;loaded&quot;)" srcset="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/6d6745ad-29e2-4305-ba19-bd29a02d79f8/DeltaCOWSmall.png?format=100w 100w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/6d6745ad-29e2-4305-ba19-bd29a02d79f8/DeltaCOWSmall.png?format=300w 300w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/6d6745ad-29e2-4305-ba19-bd29a02d79f8/DeltaCOWSmall.png?format=500w 500w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/6d6745ad-29e2-4305-ba19-bd29a02d79f8/DeltaCOWSmall.png?format=750w 750w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/6d6745ad-29e2-4305-ba19-bd29a02d79f8/DeltaCOWSmall.png?format=1000w 1000w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/6d6745ad-29e2-4305-ba19-bd29a02d79f8/DeltaCOWSmall.png?format=1500w 1500w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/6d6745ad-29e2-4305-ba19-bd29a02d79f8/DeltaCOWSmall.png?format=2500w 2500w" loading="lazy" decoding="async" data-loader="sqs">
+
+            </div>
+          </div>
+        
+          
+        
+
+        
+          
+          <figcaption class="image-caption-wrapper">
+            <div class="image-caption"><p><em>Fig 2.&nbsp;Example of the three operations using copy-on-write.</em></p></div>
+          </figcaption>
+        
+      
+        </figure>
+      
+
+    </div>
+  
+
+
+  
+
+
+</div></div><div class="sqs-block html-block sqs-block-html" data-block-type="2" data-sqsp-block="text" id="block-yui_3_17_2_1_1727171920708_8114"><div class="sqs-block-content">
+
+<div class="sqs-html-content" data-sqsp-text-block-content>
+  <p class="" style="white-space:pre-wrap;"><strong>Merge-on-read example:</strong></p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+</div></div><div class="sqs-block image-block sqs-block-image" data-block-type="5" id="block-yui_3_17_2_1_1727172564052_5630"><div class="sqs-block-content">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+    
+  
+    <div
+        class="
+          image-block-outer-wrapper
+          layout-caption-below
+          design-layout-inline
+          combination-animation-none
+          individual-animation-none
+          individual-text-animation-none
+        "
+        data-test="image-block-inline-outer-wrapper"
+    >
+
+      
+
+      
+        <figure
+            class="
+              sqs-block-image-figure
+              intrinsic
+            "
+            style="max-width:1133px;"
+        >
+          
+        
+        
+
+        
+          
+            <button
+                class="
+                  sqs-block-image-button
+                  lightbox
+                  
+          
+        
+                "
+                data-description="&lt;p&gt;&lt;em&gt;Fig 3.&amp;nbsp;The same three operations, but with deletion vectors enabled (making this a merge-on-read table).&lt;/em&gt;&lt;/p&gt;"
+                data-lightbox-theme="dark"
+            >
+              <span class="v6-visually-hidden">View fullsize</span>
+              
+          <div
+              
+              
+              class="image-block-wrapper"
+              data-animation-role="image"
+              
+  
+
+          >
+            <div class="sqs-image-shape-container-element
+              
+          
+        
+              has-aspect-ratio
+            " style="
+                position: relative;
+                
+                  padding-bottom:56.045894622802734%;
+                
+                overflow: hidden;-webkit-mask-image: -webkit-radial-gradient(white, black);
+              "
+              >
+                
+                
+                
+                
+                
+                
+                
+                <img data-stretch="false" data-src="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/55747cdf-2fee-4ff5-8d25-2a0a1fe06cb9/DeltaMORSmall.png" data-image="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/55747cdf-2fee-4ff5-8d25-2a0a1fe06cb9/DeltaMORSmall.png" data-image-dimensions="1133x635" data-image-focal-point="0.5,0.5" alt="" data-load="false" elementtiming="system-image-block"  src="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/55747cdf-2fee-4ff5-8d25-2a0a1fe06cb9/DeltaMORSmall.png" width="1133" height="635" alt="" sizes="(max-width: 640px) 100vw, (max-width: 767px) 100vw, 100vw" style="display:block;object-fit: cover; width: 100%; height: 100%; object-position: 50% 50%" onload="this.classList.add(&quot;loaded&quot;)" srcset="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/55747cdf-2fee-4ff5-8d25-2a0a1fe06cb9/DeltaMORSmall.png?format=100w 100w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/55747cdf-2fee-4ff5-8d25-2a0a1fe06cb9/DeltaMORSmall.png?format=300w 300w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/55747cdf-2fee-4ff5-8d25-2a0a1fe06cb9/DeltaMORSmall.png?format=500w 500w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/55747cdf-2fee-4ff5-8d25-2a0a1fe06cb9/DeltaMORSmall.png?format=750w 750w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/55747cdf-2fee-4ff5-8d25-2a0a1fe06cb9/DeltaMORSmall.png?format=1000w 1000w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/55747cdf-2fee-4ff5-8d25-2a0a1fe06cb9/DeltaMORSmall.png?format=1500w 1500w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/55747cdf-2fee-4ff5-8d25-2a0a1fe06cb9/DeltaMORSmall.png?format=2500w 2500w" loading="lazy" decoding="async" data-loader="sqs">
+
+            </div>
+          </div>
+        
+            </button>
+          
+        
+
+        
+          
+          <figcaption class="image-caption-wrapper">
+            <div class="image-caption"><p><em>Fig 3.&nbsp;The same three operations, but with deletion vectors enabled (making this a merge-on-read table).</em></p></div>
+          </figcaption>
+        
+      
+        </figure>
+      
+
+    </div>
+  
+
+
+  
+
+
+</div></div><div class="sqs-block html-block sqs-block-html" data-block-type="2" data-sqsp-block="text" id="block-yui_3_17_2_1_1727172564052_5952"><div class="sqs-block-content">
+
+<div class="sqs-html-content" data-sqsp-text-block-content>
+  <p class="" style="white-space:pre-wrap;">The difference between the two table modes in Delta Lake, is that a MOR table:</p><ol data-rte-list="default"><li><p class="" style="white-space:pre-wrap;">Suppresses the delete file action.</p></li><li><p class="" style="white-space:pre-wrap;">Does not copy over unchanged rows to new data files.</p></li><li><p class="" style="white-space:pre-wrap;">Adds deletion vectors to invalidate the original rows of updated/deleted rows.</p></li></ol><h2 style="white-space:pre-wrap;">Row-tracking (aka row lineage)</h2><p class="" style="white-space:pre-wrap;">Delta Lake has recently added row tracking, which is also known as row lineage. I will use the term row tracking from here on as Delta uses that term. You can find a <a href="https://github.com/delta-io/delta/blob/master/PROTOCOL.md#row-tracking"><span style="text-decoration:underline">description</span></a> of its design in the PROTOCOL.md file in the Delta GitHub repository.</p><p class="" style="white-space:pre-wrap;">Row tracking refers to the ability to track the history and evolution of a row across commits (table versions). Row tracking, when enabled, requires that each row be written with some additional metadata columns, including:</p><ul data-rte-list="default"><li><p class="" style="white-space:pre-wrap;">A stable row ID that identifies the same row across snapshots.</p></li><li><p class="" style="white-space:pre-wrap;">A stable row commit version, that indicates the commit when the row was last inserted/updated. This column will be null for an inserted row.</p></li></ul><p class="" style="white-space:pre-wrap;">Snowflake uses a similar row-tracking approach to make append-only change queries efficient by only needing to scan added data files and return rows with a null value for their equivalent of the row commit version. Snowflake also uses row tracking to feed into its Delta Minimization (min-delta) compute stage, depicted in the<a href="https://jack-vanlightly.com/analyses/2024/9/23/change-query-support-in-apache-iceberg-v2" target="_blank"> Iceberg post</a>.</p><p class="" style="white-space:pre-wrap;">We’re still waiting for the open-source compute engines to leverage row-tracking in Delta change queries. At the time of writing, <a href="https://github.com/delta-io/delta/releases/tag/v3.2.0" target="_blank">Delta-Spark 3.2.0</a> supports the reading and writing the change-tracking columns only, but doesn’t use to make certain queries more efficient. Later, we’ll show some code that outputs the row ID and row commit version columns of a table using Spark 3.5 with Delta-Spark 3.2.0.</p><p class="" style="white-space:pre-wrap;">Now time to dive into change query support in Delta Lake.</p><h1 style="white-space:pre-wrap;">Append-only and Upsert Change Queries</h1><p class="" style="white-space:pre-wrap;">As in the Apache Iceberg post, I’ll include the following open-source compute engines:</p><ul data-rte-list="default"><li><p class="" style="white-space:pre-wrap;">Apache Spark</p></li><li><p class="" style="white-space:pre-wrap;">Spark Structured Streaming (Spark SS)</p></li><li><p class="" style="white-space:pre-wrap;">Apache Flink.</p></li></ul><p class="" style="white-space:pre-wrap;">Flink and Spark SS both offer the ability to incrementally query a Delta Lake table, though with some rough edges. None yet use row tracking in their change queries, and therefore there are a number of limitations at the time of writing.</p><p class="" style="white-space:pre-wrap;">Firstly, both Spark SS and Flink only read the data files of AddFile actions. This means that delete operations are not reflected in the results. As I covered in the <a href="https://jack-vanlightly.com/blog/2024/9/19/table-format-comparisons-change-queries-and-cdc" target="_blank">parent </a>blog post, it’s open to debate as to whether an incremental append-only or upsert query should reflect deletes by not returning deleted rows or not. Snowflake described in their <a href="https://dl.acm.org/doi/pdf/10.1145/3589776"><span style="text-decoration:underline">incremental processing paper</span></a>, that they decided to reflect deletes, even in append-only change queries, by not returning deleted rows.&nbsp;</p><p class="" style="white-space:pre-wrap;">Secondly, both Spark SS and Flink error out when encountering a delta log entry that both adds and deletes files. These are commits that perform row-level updates and deletes. Because the basics of row tracking was only just implemented in Delta Lake, none of the three sampled compute engines make use of it yet. Because they don’t make use of it and because performing row-level comparisons between added and deleted files is expensive, we are left with rather poor support for append-only and upsert change queries (as we’ll see next).</p><p class="" style="white-space:pre-wrap;">Erroring when a row-level update/delete commit is encountered is not ideal, so to avoid these errors, users are given some configs:</p><ul data-rte-list="default"><li><p class="" style="white-space:pre-wrap;"><strong>ignoreChanges</strong> (now deprecated in Spark), tells Spark SS/Flink that when it encounters a commit with both AddFile and RemoveFile actions, to return all rows in the added data files, regardless of whether those rows were just carried over from the original file or were actually updated rows, or the AddFile corresponds to an unchanged data file that has a DV file change. Thus, this config can cause duplicates, but avoids Spark/Flink streaming reads from erroring when row-level updates/deletes are made to the table.</p></li><li><p class="" style="white-space:pre-wrap;"><strong>ignoreDeletes</strong>, tells Spark/Flink to suppress an error that would be raised by encountering a commit that only delete files.</p></li><li><p class="" style="white-space:pre-wrap;"><strong>skipChangeCommits</strong>, tells Spark to simply skip any commits that both add and remove data files. This config therefore causes queries to only return inserted rows. Flink does not yet have this config.</p></li></ul><p class="" style="white-space:pre-wrap;">We’ll run some examples in a moment to make things clearer. Before we do, the last thing to take into account is that the rows returned by a Spark SS streaming read depend on the starting commit of the read. The Delta Lake docs state that: “<em>When you load a Delta table as a stream source and use it in a streaming query, the query processes all of the data present in the table as well as any new data that arrives after the stream is started.</em>” </p><p class="" style="white-space:pre-wrap;">This means that a streaming read is the combination of an initial batch query based on the starting table version + an ongoing streaming query that walks the Delta Log as new commits are made. You can specify a starting commit or timestamp, and the table is queried batch style up to that point (exclusive), then the streaming read starts going through the Delta Log, commit by commit returning results.</p><p class="" style="white-space:pre-wrap;">Next, we’ll run some streaming reads based on the same three commits, but using different configs.</p><h2 style="white-space:pre-wrap;">Examples using Spark SS</h2><p class="" style="white-space:pre-wrap;">Let’s run the same three commits that I used earlier in the COW vs MOR diagrams. These were three commits to insert, update, and delete some rows (this is an excerpt of some Python code I used to test this stuff):</p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+</div></div><div class="sqs-block code-block sqs-block-code" data-block-type="23" id="block-yui_3_17_2_1_1727172564052_12415"><div class="sqs-block-content"><pre class="source-code">inputdf1 = spark.createDataFrame([
+   Row(name='jack', fruit='apple'),
+   Row(name='sarah', fruit='orange'),
+   Row(name='john', fruit='pineapple')
+])
+inputdf1.coalesce(1).write.format(&quot;delta&quot;).mode(&quot;overwrite&quot;).save(path)
+deltaTable = DeltaTable.forPath(spark, path)
+deltaTable.update(&quot;name == 'jack'&quot;, { &quot;fruit&quot;: &quot;'banana'&quot; })
+deltaTable.delete(&quot;name == 'john'&quot;)</pre></div></div><div class="sqs-block html-block sqs-block-html" data-block-type="2" data-sqsp-block="text" id="block-yui_3_17_2_1_1727172564052_12517"><div class="sqs-block-content">
+
+<div class="sqs-html-content" data-sqsp-text-block-content>
+  <p class="" style="white-space:pre-wrap;">The configs we’ll use are:</p><ul data-rte-list="default"><li><p class="" style="white-space:pre-wrap;">Table property: <strong>delta.enableDeletionVectors</strong>.</p></li><li><p class="" style="white-space:pre-wrap;">Streaming read option: <strong>ignoreChanges</strong></p></li><li><p class="" style="white-space:pre-wrap;">Streaming read option: <strong>skipChangeCommits</strong></p></li><li><p class="" style="white-space:pre-wrap;">Streaming read option: <strong>startingVersion</strong></p></li></ul><p class="" style="white-space:pre-wrap;">Because there are only three commits, the streaming read will only ever return one batch of results, no matter which configs we choose.</p><p class="" style="white-space:pre-wrap;">To understand the results returned by these experiments, it’s useful to remember the COW vs MOR diagrams from earlier. Please take a moment to review them again.</p><p class="" style="white-space:pre-wrap;">As a reminder, streaming reads (after the initial batch query) will only read the data files referenced by AddFile actions in the Delta Log.</p><h3 style="white-space:pre-wrap;">Config 1: DV enabled or disabled, no startingVersion, ignoreChanges=false</h3>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+</div></div><div class="sqs-block code-block sqs-block-code" data-block-type="23" id="block-yui_3_17_2_1_1727172564052_13895"><div class="sqs-block-content"><pre class="source-code">spark.readStream.format(&quot;delta&quot;)
+           .option(&quot;ignoreChanges&quot;, &quot;false&quot;)
+           .option(&quot;skipChangeCommits&quot;, &quot;false&quot;)</pre></div></div><div class="sqs-block html-block sqs-block-html" data-block-type="2" data-sqsp-block="text" id="block-yui_3_17_2_1_1727172564052_13974"><div class="sqs-block-content">
+
+<div class="sqs-html-content" data-sqsp-text-block-content>
+  <p class="" style="white-space:pre-wrap;">The three commits include two that perform row-level updates or deletes, so a streaming read should error when <em>ignoreChanges</em> is set to false. However, no startingVersion is specified in this example so the initial batch query will be based on the current table version (which includes all three commits), and so the subsequent incremental queries have no data to process - therefore the no error occurs.</p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+</div></div><div class="sqs-block code-block sqs-block-code" data-block-type="23" id="block-yui_3_17_2_1_1727172564052_14954"><div class="sqs-block-content"><pre class="source-code">Result:
++-----+------+
+| name| fruit|
++-----+------+
+| jack|banana|
+|sarah|orange|
++-----+------+</pre></div></div><div class="sqs-block html-block sqs-block-html" data-block-type="2" data-sqsp-block="text" id="block-yui_3_17_2_1_1727172564052_15029"><div class="sqs-block-content">
+
+<div class="sqs-html-content" data-sqsp-text-block-content>
+  <h3 style="white-space:pre-wrap;">Config 2: DV enabled or disabled, startingVersion specified, ignoreChanges=false</h3>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+</div></div><div class="sqs-block code-block sqs-block-code" data-block-type="23" id="block-yui_3_17_2_1_1727172564052_16295"><div class="sqs-block-content"><pre class="source-code">spark.readStream.format(&quot;delta&quot;)
+    .option(&quot;ignoreChanges&quot;, &quot;false&quot;)
+    .option(&quot;skipChangeCommits&quot;, &quot;false&quot;)
+    .option(&quot;startingVersion&quot;, 0)</pre></div></div><div class="sqs-block html-block sqs-block-html" data-block-type="2" data-sqsp-block="text" id="block-yui_3_17_2_1_1727172564052_16361"><div class="sqs-block-content">
+
+<div class="sqs-html-content" data-sqsp-text-block-content>
+  <p class="" style="white-space:pre-wrap;">This time we specify a starting table version of 0, so the streaming read has no initial batch query to run and immediately starts walking the Delta Log. However, because ignoreChanges=false, it immediately errors out with:</p><p class="" style="white-space:pre-wrap;"><em>org.apache.spark.sql.delta.DeltaUnsupportedOperationException: [DELTA_SOURCE_TABLE_IGNORE_CHANGES] Detected a data update (for example UPDATE (Map(predicate -&gt; ["(name#56 = jack)"]))) in the source table at version 2. This is currently not supported. If this is going to happen regularly and you are okay to skip changes, set the option 'skipChangeCommits' to 'true'. If you would like the data update to be reflected, please restart this query with a fresh checkpoint directory.</em></p><h3 style="white-space:pre-wrap;">Config 3: DV disabled (COW) , startingVersion specified, ignoreChanges=true</h3>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+</div></div><div class="sqs-block code-block sqs-block-code" data-block-type="23" id="block-yui_3_17_2_1_1727172564052_20083"><div class="sqs-block-content"><pre class="source-code">DeltaTable...property(&quot;delta.enableDeletionVectors&quot;, &quot;false&quot;)
+spark.readStream.format(&quot;delta&quot;)
+    .option(&quot;ignoreChanges&quot;, &quot;true&quot;)
+    .option(&quot;skipChangeCommits&quot;, &quot;false&quot;)
+    .option(&quot;startingVersion&quot;, 0)</pre></div></div><div class="sqs-block html-block sqs-block-html" data-block-type="2" data-sqsp-block="text" id="block-yui_3_17_2_1_1727172564052_20151"><div class="sqs-block-content">
+
+<div class="sqs-html-content" data-sqsp-text-block-content>
+  <p class="" style="white-space:pre-wrap;">This time Delta will not error out when encountering the update commits of table versions 2 and 3. Instead it will simply return the rows in each AddFile action. With DV being disabled, this makes Delta operate using copy-on-write, so we should have three data files, corresponding to the three table versions. The results are the union of those three data files.</p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+</div></div><div class="sqs-block code-block sqs-block-code" data-block-type="23" id="block-yui_3_17_2_1_1727172564052_21129"><div class="sqs-block-content"><pre class="source-code">Result (I added the commit numbers):
+
++-----+---------+
+| name|    fruit|
++-----+---------+
+| jack|    apple|   (commit 1)
+|sarah|   orange|   (commit 1)
+| john|pineapple|   (commit 1)
+| jack|   banana|   (commit 2)
+|sarah|   orange|   (commit 2)
+| john|pineapple|   (commit 2)
+| jack|   banana|   (commit 3)
+|sarah|   orange|   (commit 3)
++-----+---------+</pre></div></div><div class="sqs-block html-block sqs-block-html" data-block-type="2" data-sqsp-block="text" id="block-yui_3_17_2_1_1727172564052_21194"><div class="sqs-block-content">
+
+<div class="sqs-html-content" data-sqsp-text-block-content>
+  <h3 style="white-space:pre-wrap;">Config 4: DV enabled (MOR) , startingVersion specified, ignoreChanges=true</h3>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+</div></div><div class="sqs-block code-block sqs-block-code" data-block-type="23" id="block-yui_3_17_2_1_1727172564052_22868"><div class="sqs-block-content"><pre class="source-code">DeltaTable...property(&quot;delta.enableDeletionVectors&quot;, &quot;true&quot;)
+spark.readStream.format(&quot;delta&quot;)
+    .option(&quot;ignoreChanges&quot;, &quot;true&quot;)
+    .option(&quot;skipChangeCommits&quot;, &quot;false&quot;)
+    .option(&quot;startingVersion&quot;, 0)</pre></div></div><div class="sqs-block html-block sqs-block-html" data-block-type="2" data-sqsp-block="text" id="block-yui_3_17_2_1_1727172564052_22934"><div class="sqs-block-content">
+
+<div class="sqs-html-content" data-sqsp-text-block-content>
+  <p class="" style="white-space:pre-wrap;">This time, there are a different set of AddFile actions to be read. Each DV file change results in an add and a remove of the associated data file, plus the AddFile of any data file added because of an update. Refer back to the MOR diagram earlier on for a reminder. The results are different with DVs enabled. The reason is that the data files of AddFile actions with MOR are not the same as COW, so different results are returned.</p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+</div></div><div class="sqs-block code-block sqs-block-code" data-block-type="23" id="block-yui_3_17_2_1_1727172564052_24074"><div class="sqs-block-content"><pre class="source-code">Result (again, I added the commit numbers
+to help you make sense of the results):
++-----+---------+
+| name|    fruit|
++-----+---------+
+| jack|    apple|   (commit 1)
+|sarah|   orange|   (commit 1)
+| john|pineapple|   (commit 1)
+|sarah|   orange|   (commit 2)
+| john|pineapple|   (commit 2)
+| jack|   banana|   (commit 2)
+|sarah|   orange|   (commit 3)
++-----+---------+</pre></div></div><div class="sqs-block html-block sqs-block-html" data-block-type="2" data-sqsp-block="text" id="block-yui_3_17_2_1_1727172564052_24146"><div class="sqs-block-content">
+
+<div class="sqs-html-content" data-sqsp-text-block-content>
+  <p class="" style="white-space:pre-wrap;">This result looks pretty odd, the results of commit 1 and commit 2 make sense, but why is the Sarah row returned at the end? Let’s unpack it:</p><ul data-rte-list="default"><li><p class="" style="white-space:pre-wrap;">Commit 1 inserted the three rows to data-1.&nbsp;</p></li><li><p class="" style="white-space:pre-wrap;">Commit 2 updated Jack to Banana, which involved two AddFiles actions. The first AddFile was readding data-1, but with a deletion vector invalidating the [Jack, Apple] row. It also contained an AddFile action containing data-2, added for the new Jack row corresponding to [Jack, Banana].</p></li><li><p class="" style="white-space:pre-wrap;">So far so good, but why is only Sarah returned for commit 3? The answer is that commit 3 added a DV for the John row of data-1, which resulted in an AddFile for data-1 with the new DV file (that invalidates the Jack and John rows). Because it was a delete, no additional AddFile occurred, so data-1 was read again but with delete-2 applied, which resulted in only one valid row: the Sarah row.</p></li></ul>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+</div></div><div class="sqs-block image-block sqs-block-image" data-block-type="5" id="block-yui_3_17_2_1_1727172564052_25534"><div class="sqs-block-content">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+    
+  
+    <div
+        class="
+          image-block-outer-wrapper
+          layout-caption-below
+          design-layout-inline
+          combination-animation-none
+          individual-animation-none
+          individual-text-animation-none
+        "
+        data-test="image-block-inline-outer-wrapper"
+    >
+
+      
+
+      
+        <figure
+            class="
+              sqs-block-image-figure
+              intrinsic
+            "
+            style="max-width:1133px;"
+        >
+          
+        
+        
+
+        
+          
+            <button
+                class="
+                  sqs-block-image-button
+                  lightbox
+                  
+          
+        
+                "
+                data-description="&lt;p&gt;Fig 4. Explaining the results of the last Spark SS query,&lt;/p&gt;"
+                data-lightbox-theme="dark"
+            >
+              <span class="v6-visually-hidden">View fullsize</span>
+              
+          <div
+              
+              
+              class="image-block-wrapper"
+              data-animation-role="image"
+              
+  
+
+          >
+            <div class="sqs-image-shape-container-element
+              
+          
+        
+              has-aspect-ratio
+            " style="
+                position: relative;
+                
+                  padding-bottom:70.87378692626953%;
+                
+                overflow: hidden;-webkit-mask-image: -webkit-radial-gradient(white, black);
+              "
+              >
+                
+                
+                
+                
+                
+                
+                
+                <img data-stretch="false" data-src="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/3e54f640-03c3-41dc-bbbf-275dbf28c977/MORSparkSSExplainedSmall.png" data-image="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/3e54f640-03c3-41dc-bbbf-275dbf28c977/MORSparkSSExplainedSmall.png" data-image-dimensions="1133x803" data-image-focal-point="0.5,0.5" alt="" data-load="false" elementtiming="system-image-block"  src="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/3e54f640-03c3-41dc-bbbf-275dbf28c977/MORSparkSSExplainedSmall.png" width="1133" height="803" alt="" sizes="(max-width: 640px) 100vw, (max-width: 767px) 100vw, 100vw" style="display:block;object-fit: cover; width: 100%; height: 100%; object-position: 50% 50%" onload="this.classList.add(&quot;loaded&quot;)" srcset="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/3e54f640-03c3-41dc-bbbf-275dbf28c977/MORSparkSSExplainedSmall.png?format=100w 100w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/3e54f640-03c3-41dc-bbbf-275dbf28c977/MORSparkSSExplainedSmall.png?format=300w 300w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/3e54f640-03c3-41dc-bbbf-275dbf28c977/MORSparkSSExplainedSmall.png?format=500w 500w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/3e54f640-03c3-41dc-bbbf-275dbf28c977/MORSparkSSExplainedSmall.png?format=750w 750w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/3e54f640-03c3-41dc-bbbf-275dbf28c977/MORSparkSSExplainedSmall.png?format=1000w 1000w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/3e54f640-03c3-41dc-bbbf-275dbf28c977/MORSparkSSExplainedSmall.png?format=1500w 1500w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/3e54f640-03c3-41dc-bbbf-275dbf28c977/MORSparkSSExplainedSmall.png?format=2500w 2500w" loading="lazy" decoding="async" data-loader="sqs">
+
+            </div>
+          </div>
+        
+            </button>
+          
+        
+
+        
+          
+          <figcaption class="image-caption-wrapper">
+            <div class="image-caption"><p>Fig 4. Explaining the results of the last Spark SS query,</p></div>
+          </figcaption>
+        
+      
+        </figure>
+      
+
+    </div>
+  
+
+
+  
+
+
+</div></div><div class="sqs-block html-block sqs-block-html" data-block-type="2" data-sqsp-block="text" id="block-yui_3_17_2_1_1727172564052_25858"><div class="sqs-block-content">
+
+<div class="sqs-html-content" data-sqsp-text-block-content>
+  <p class="" style="white-space:pre-wrap;">Understanding the underlying metadata, data and delete files, and the logic of a streaming read demystifies these results (but it is not intuitive at all).</p><h3 style="white-space:pre-wrap;">Config 5. DV enabled or disabled, startingVersion specified, skipChangeCommits=true</h3>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+</div></div><div class="sqs-block code-block sqs-block-code" data-block-type="23" id="block-yui_3_17_2_1_1727172564052_27875"><div class="sqs-block-content"><pre class="source-code">spark.readStream.format(&quot;delta&quot;)
+    .option(&quot;ignoreChanges&quot;, &quot;false&quot;)
+    .option(&quot;skipChangeCommits&quot;, &quot;true&quot;)
+    .option(&quot;startingVersion&quot;, 0)</pre></div></div><div class="sqs-block html-block sqs-block-html" data-block-type="2" data-sqsp-block="text" id="block-yui_3_17_2_1_1727172564052_27941"><div class="sqs-block-content">
+
+<div class="sqs-html-content" data-sqsp-text-block-content>
+  <p class="" style="white-space:pre-wrap;">When <em>skipChangeCommits</em> is enabled, a streaming read walking the Delta Log looking for AddFile actions will simply skip right over any commits with both AddFile and RemoveFile actions. This makes the choice of COW or MOR irrelevant, and makes a streaming read one that only returns inserted rows. Revisit the COW vs MOR diagrams to convince yourself this is true.</p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+</div></div><div class="sqs-block code-block sqs-block-code" data-block-type="23" id="block-yui_3_17_2_1_1727172564052_44947"><div class="sqs-block-content"><pre class="source-code">Result:
++-----+---------+
+| jack|    apple|
+|sarah|   orange|
+| john|pineapple|
++-----+---------+</pre></div></div><div class="sqs-block html-block sqs-block-html" data-block-type="2" data-sqsp-block="text" id="block-yui_3_17_2_1_1727172564052_45023"><div class="sqs-block-content">
+
+<div class="sqs-html-content" data-sqsp-text-block-content>
+  <h3 style="white-space:pre-wrap;">Append-only/upsert change query summary</h3><p class="" style="white-space:pre-wrap;">It is no wonder that <em>ignoreChanges</em> is deprecated in Spark. It’s hard to make sense of and build a data pipeline or app based on its results. If you’re going to use streaming reads on mutable tables, it’s probably best to stick with <em>skipChangeCommits</em> and only process new data. But remember that any inserted rows from a MERGE statement will be skipped, just like with Apache Iceberg. I’ll therefore classify the append-only support as non-conformant to my append-only change query definition.</p><p class="" style="white-space:pre-wrap;">The good news is that Delta has a much clearer and high read performance CDC feed feature that I think makes up for the current shortcomings of the append-only/upsert streaming reads in Spark and Flink.</p><h2 style="white-space:pre-wrap;">min/full-delta via the CDC feed feature</h2><p class="" style="white-space:pre-wrap;">Despite the storage and writer overhead, CDC file materialization is the way Delta Lake supports CDC change queries. While there is a storage and writer cost, the benefits of efficient reads likely outweigh the overhead. This would especially be true in cases with many CDC readers and derived tables that depends on the CDC feed. Snowflake took a different approach, using the row-lineage approach, highlighting the greater space efficiency. Having not implemented these table formats, I can’t tell you which is the best approach.</p><p class="" style="white-space:pre-wrap;">Using the same three commits from the last section, the next two figures show the metadata, data and CDC files created for COW and MOR tables.</p><p class="" style="white-space:pre-wrap;"><strong>COW example:</strong></p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+</div></div><div class="sqs-block image-block sqs-block-image" data-block-type="5" id="block-yui_3_17_2_1_1727172564052_46139"><div class="sqs-block-content">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+    
+  
+    <div
+        class="
+          image-block-outer-wrapper
+          layout-caption-below
+          design-layout-inline
+          combination-animation-none
+          individual-animation-none
+          individual-text-animation-none
+        "
+        data-test="image-block-inline-outer-wrapper"
+    >
+
+      
+
+      
+        <figure
+            class="
+              sqs-block-image-figure
+              intrinsic
+            "
+            style="max-width:1103px;"
+        >
+          
+        
+        
+
+        
+          
+            <button
+                class="
+                  sqs-block-image-button
+                  lightbox
+                  
+          
+        
+                "
+                data-description="&lt;p&gt;&lt;em&gt;Fig 5. Depicts a simplified view of a Delta Lake table that materializes changes as CDC files, with deletion vectors disabled (copy-on-write).&lt;/em&gt;&lt;/p&gt;"
+                data-lightbox-theme="dark"
+            >
+              <span class="v6-visually-hidden">View fullsize</span>
+              
+          <div
+              
+              
+              class="image-block-wrapper"
+              data-animation-role="image"
+              
+  
+
+          >
+            <div class="sqs-image-shape-container-element
+              
+          
+        
+              has-aspect-ratio
+            " style="
+                position: relative;
+                
+                  padding-bottom:70.62556457519531%;
+                
+                overflow: hidden;-webkit-mask-image: -webkit-radial-gradient(white, black);
+              "
+              >
+                
+                
+                
+                
+                
+                
+                
+                <img data-stretch="false" data-src="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/0b68a087-b6ee-45cb-a018-159cc30abe53/DeltaCdcCowSmall.png" data-image="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/0b68a087-b6ee-45cb-a018-159cc30abe53/DeltaCdcCowSmall.png" data-image-dimensions="1103x779" data-image-focal-point="0.5,0.5" alt="" data-load="false" elementtiming="system-image-block"  src="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/0b68a087-b6ee-45cb-a018-159cc30abe53/DeltaCdcCowSmall.png" width="1103" height="779" alt="" sizes="(max-width: 640px) 100vw, (max-width: 767px) 100vw, 100vw" style="display:block;object-fit: cover; width: 100%; height: 100%; object-position: 50% 50%" onload="this.classList.add(&quot;loaded&quot;)" srcset="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/0b68a087-b6ee-45cb-a018-159cc30abe53/DeltaCdcCowSmall.png?format=100w 100w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/0b68a087-b6ee-45cb-a018-159cc30abe53/DeltaCdcCowSmall.png?format=300w 300w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/0b68a087-b6ee-45cb-a018-159cc30abe53/DeltaCdcCowSmall.png?format=500w 500w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/0b68a087-b6ee-45cb-a018-159cc30abe53/DeltaCdcCowSmall.png?format=750w 750w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/0b68a087-b6ee-45cb-a018-159cc30abe53/DeltaCdcCowSmall.png?format=1000w 1000w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/0b68a087-b6ee-45cb-a018-159cc30abe53/DeltaCdcCowSmall.png?format=1500w 1500w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/0b68a087-b6ee-45cb-a018-159cc30abe53/DeltaCdcCowSmall.png?format=2500w 2500w" loading="lazy" decoding="async" data-loader="sqs">
+
+            </div>
+          </div>
+        
+            </button>
+          
+        
+
+        
+          
+          <figcaption class="image-caption-wrapper">
+            <div class="image-caption"><p><em>Fig 5. Depicts a simplified view of a Delta Lake table that materializes changes as CDC files, with deletion vectors disabled (copy-on-write).</em></p></div>
+          </figcaption>
+        
+      
+        </figure>
+      
+
+    </div>
+  
+
+
+  
+
+
+</div></div><div class="sqs-block html-block sqs-block-html" data-block-type="2" data-sqsp-block="text" id="block-yui_3_17_2_1_1727172564052_46473"><div class="sqs-block-content">
+
+<div class="sqs-html-content" data-sqsp-text-block-content>
+  <p class="" style="white-space:pre-wrap;"><strong>MOR example:</strong></p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+</div></div><div class="sqs-block image-block sqs-block-image" data-block-type="5" id="block-yui_3_17_2_1_1727172564052_48126"><div class="sqs-block-content">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+    
+  
+    <div
+        class="
+          image-block-outer-wrapper
+          layout-caption-below
+          design-layout-inline
+          combination-animation-none
+          individual-animation-none
+          individual-text-animation-none
+        "
+        data-test="image-block-inline-outer-wrapper"
+    >
+
+      
+
+      
+        <figure
+            class="
+              sqs-block-image-figure
+              intrinsic
+            "
+            style="max-width:1133px;"
+        >
+          
+        
+        
+
+        
+          
+            <button
+                class="
+                  sqs-block-image-button
+                  lightbox
+                  
+          
+        
+                "
+                data-description="&lt;p&gt;&lt;em&gt;Fig 6.&amp;nbsp; Depicts a simplified view of a Delta Lake table that materializes changes as CDC files, with deletion vectors enabled (merge-on-read).&lt;/em&gt;&lt;/p&gt;"
+                data-lightbox-theme="dark"
+            >
+              <span class="v6-visually-hidden">View fullsize</span>
+              
+          <div
+              
+              
+              class="image-block-wrapper"
+              data-animation-role="image"
+              
+  
+
+          >
+            <div class="sqs-image-shape-container-element
+              
+          
+        
+              has-aspect-ratio
+            " style="
+                position: relative;
+                
+                  padding-bottom:68.7555160522461%;
+                
+                overflow: hidden;-webkit-mask-image: -webkit-radial-gradient(white, black);
+              "
+              >
+                
+                
+                
+                
+                
+                
+                
+                <img data-stretch="false" data-src="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/2cf0b7a3-b6cd-44cf-a327-4b90e593e4b1/DeltaCdcMORSmall.png" data-image="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/2cf0b7a3-b6cd-44cf-a327-4b90e593e4b1/DeltaCdcMORSmall.png" data-image-dimensions="1133x779" data-image-focal-point="0.5,0.5" alt="" data-load="false" elementtiming="system-image-block"  src="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/2cf0b7a3-b6cd-44cf-a327-4b90e593e4b1/DeltaCdcMORSmall.png" width="1133" height="779" alt="" sizes="(max-width: 640px) 100vw, (max-width: 767px) 100vw, 100vw" style="display:block;object-fit: cover; width: 100%; height: 100%; object-position: 50% 50%" onload="this.classList.add(&quot;loaded&quot;)" srcset="https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/2cf0b7a3-b6cd-44cf-a327-4b90e593e4b1/DeltaCdcMORSmall.png?format=100w 100w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/2cf0b7a3-b6cd-44cf-a327-4b90e593e4b1/DeltaCdcMORSmall.png?format=300w 300w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/2cf0b7a3-b6cd-44cf-a327-4b90e593e4b1/DeltaCdcMORSmall.png?format=500w 500w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/2cf0b7a3-b6cd-44cf-a327-4b90e593e4b1/DeltaCdcMORSmall.png?format=750w 750w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/2cf0b7a3-b6cd-44cf-a327-4b90e593e4b1/DeltaCdcMORSmall.png?format=1000w 1000w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/2cf0b7a3-b6cd-44cf-a327-4b90e593e4b1/DeltaCdcMORSmall.png?format=1500w 1500w, https://images.squarespace-cdn.com/content/v1/56894e581c1210fead06f878/2cf0b7a3-b6cd-44cf-a327-4b90e593e4b1/DeltaCdcMORSmall.png?format=2500w 2500w" loading="lazy" decoding="async" data-loader="sqs">
+
+            </div>
+          </div>
+        
+            </button>
+          
+        
+
+        
+          
+          <figcaption class="image-caption-wrapper">
+            <div class="image-caption"><p><em>Fig 6.&nbsp; Depicts a simplified view of a Delta Lake table that materializes changes as CDC files, with deletion vectors enabled (merge-on-read).</em></p></div>
+          </figcaption>
+        
+      
+        </figure>
+      
+
+    </div>
+  
+
+
+  
+
+
+</div></div><div class="sqs-block html-block sqs-block-html" data-block-type="2" data-sqsp-block="text" id="block-yui_3_17_2_1_1727172564052_48444"><div class="sqs-block-content">
+
+<div class="sqs-html-content" data-sqsp-text-block-content>
+  <p class="" style="white-space:pre-wrap;">Delta Lake was designed around batch and micro-batch use cases of Apache Spark and, therefore, assumes that the compute engine will perform a scan phase where it collects the rows to be modified. It then applies the changes to the target rows and, at that moment, has all the information needed to write CDC files with the before and after images. If a commit only adds one or more data files or only logically deletes one or more files, then no CDC file is created. When CDC is enabled, and no CDC file exists in a commit, CDC readers assume any rows in an added data file are inserts and any rows in a deleted data file are deletes.&nbsp;</p><p class="" style="white-space:pre-wrap;">The process works the same way whether the table is configured with copy-on-write or merge-on-read. Whether a table is COW or MOR is orthogonal to writing CDC files.</p><p class="" style="white-space:pre-wrap;">A CDC change query will return the changes since a given table version. The reader inspects each delta log entry since the specified table version, and checks whether it includes a CDC file. If CDC files exist, then AddFile actions correspond to inserts and RemoveFile actions correspond to deletes.</p><p class="" style="white-space:pre-wrap;">Let’s run some example CDC feed reads to see if there are any surprises.</p><h3 style="white-space:pre-wrap;">CDC config 1 - DV enabled or disabled, startingPosition specified</h3>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+</div></div><div class="sqs-block code-block sqs-block-code" data-block-type="23" id="block-yui_3_17_2_1_1727172564052_49776"><div class="sqs-block-content"><pre class="source-code">spark.readStream.format(&quot;delta&quot;)
+    .option(&quot;readChangeFeed&quot;, &quot;true&quot;)
+    .option(&quot;startingVersion&quot;, 0)</pre></div></div><div class="sqs-block html-block sqs-block-html" data-block-type="2" data-sqsp-block="text" id="block-yui_3_17_2_1_1727172564052_49849"><div class="sqs-block-content">
+
+<div class="sqs-html-content" data-sqsp-text-block-content>
+  <p class="" style="white-space:pre-wrap;">Spark will perform a batch query based on the table state at the starting commit, then perform streaming reads over subsequent log entries. In this case we set a startingVersion of 0 so no initial batch query is executed and the streaming portion walks the whole Delta Log from the first version onwards. This returns an unminimized sequence of CDC events, where pre and post image are separate rows.</p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+</div></div><div class="sqs-block code-block sqs-block-code" data-block-type="23" id="block-yui_3_17_2_1_1727172564052_50703"><div class="sqs-block-content"><pre class="source-code">+-----+---------+----------------+---------------+
+| name|    fruit|    _change_type|_commit_version|
++-----+---------+----------------+---------------+
+| jack|    apple|          insert|              1|
+|sarah|   orange|          insert|              1|
+| john|pineapple|          insert|              1|
+| jack|    apple| update_preimage|              2|
+| jack|   banana|update_postimage|              2|
+| john|pineapple|          delete|              3|
++-----+---------+----------------+---------------+</pre></div></div><div class="sqs-block html-block sqs-block-html" data-block-type="2" data-sqsp-block="text" id="block-yui_3_17_2_1_1727172564052_50768"><div class="sqs-block-content">
+
+<div class="sqs-html-content" data-sqsp-text-block-content>
+  <h3 style="white-space:pre-wrap;">CDC config 2 - DV enabled or disabled, startingPosition not specified</h3>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+</div></div><div class="sqs-block code-block sqs-block-code" data-block-type="23" id="block-yui_3_17_2_1_1727172564052_51746"><div class="sqs-block-content"><pre class="source-code">spark.readStream.format(&quot;delta&quot;)
+    .option(&quot;readChangeFeed&quot;, &quot;true&quot;)</pre></div></div><div class="sqs-block html-block sqs-block-html" data-block-type="2" data-sqsp-block="text" id="block-yui_3_17_2_1_1727172564052_51818"><div class="sqs-block-content">
+
+<div class="sqs-html-content" data-sqsp-text-block-content>
+  <p class="" style="white-space:pre-wrap;">When we don’t specify the startingPosition, the starting point defaults to the current table version so the initial batch query covers all three commits. The batch portion returns a minimized set of CDC events that represent the state of the table right now.</p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+</div></div><div class="sqs-block code-block sqs-block-code" data-block-type="23" id="block-yui_3_17_2_1_1727172564052_54841"><div class="sqs-block-content"><pre class="source-code">+-----+------+------------+---------------+
+| name| fruit|_change_type|_commit_version|
++-----+------+------------+---------------+
+| jack|banana|      insert|              3|
+|sarah|orange|      insert|              3|
++-----+------+------------+---------------+
+</pre></div></div><div class="sqs-block html-block sqs-block-html" data-block-type="2" data-sqsp-block="text" id="block-yui_3_17_2_1_1727172564052_54913"><div class="sqs-block-content">
+
+<div class="sqs-html-content" data-sqsp-text-block-content>
+  <h3 style="white-space:pre-wrap;">CDC feed summary</h3><p class="" style="white-space:pre-wrap;">This CDC feed behavior is pretty simple and straightforward. Additionally, because the feed has been materialized by the writer, it is extremely efficient to read.</p><p class="" style="white-space:pre-wrap;">You don’t get to choose min-delta or full-delta; basically, the initial batch is <em>min-delta</em> and the subsequent streaming portion is <em>full-delta</em>.</p><h2 style="white-space:pre-wrap;">Seeing the hidden row tracking columns using Spark</h2><p class="" style="white-space:pre-wrap;">First you must ensure that row tracking is enabled via the table property delta.enableRowTracking.</p><p class="" style="white-space:pre-wrap;">The following code, run after the three commits, selects the row id and row commit version columns:</p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+</div></div><div class="sqs-block code-block sqs-block-code" data-block-type="23" id="block-yui_3_17_2_1_1727172564052_55992"><div class="sqs-block-content"><pre class="source-code">spark.read.format(&quot;delta&quot;).load(path) /
+	.select(&quot;name&quot;, /
+            &quot;fruit&quot;, /
+            &quot;_metadata.row_id&quot;, /
+            &quot;_metadata.row_commit_version&quot;).show()
+
++-----+------+------+------------------+
+| name| fruit|row_id|row_commit_version|
++-----+------+------+------------------+
+| jack|banana|     0|                 2|
+|sarah|orange|     1|                 1|
++-----+------+------+------------------+</pre></div></div><div class="sqs-block html-block sqs-block-html" data-block-type="2" data-sqsp-block="text" id="block-yui_3_17_2_1_1727172564052_56066"><div class="sqs-block-content">
+
+<div class="sqs-html-content" data-sqsp-text-block-content>
+  <p class="" style="white-space:pre-wrap;">Now we just need the open source compute engines to leverage this for better append-only and upsert change queries.</p><h1 style="white-space:pre-wrap;">Conclusions</h1><p class="" style="white-space:pre-wrap;">Current support for Delta Lake change queries in Flink, Spark and Spark Structured Streaming:</p><ul data-rte-list="default"><li><p class="" style="white-space:pre-wrap;"><strong>append-only</strong>: Yes, but only commits that add data files only, so some inserts can be missed (such as inserts from MERGE statements). </p><ul data-rte-list="default"><li><p class="" style="white-space:pre-wrap;">The recently added row tracking, implemented in Delta Spark 3.2.0 could be leveraged to fix this.</p></li></ul></li><li><p class="" style="white-space:pre-wrap;"><strong>upsert</strong>: Deprecated, pretty poor support.</p></li><li><p class="" style="white-space:pre-wrap;"><strong>min-delta</strong>: Partial support in Spark Structured Streaming. The initial batch query returns minimized CDC. Uses the <em>materialize CDC files on write</em> approach.</p></li><li><p class="" style="white-space:pre-wrap;"><strong>full-delta</strong>: Support in Spark Structured Streaming. The continuous incremental portion of the streaming read returns full CDC. Uses the <em>materialize CDC files on write</em> approach.</p></li></ul><p class="" style="white-space:pre-wrap;">The sampled open-source compute engines essentially have the same <em>append-only</em>/<em>upsert</em> change query limitations with Delta Lake as they do with Apache Iceberg. They only really support the same non-conformant append-only change query as they do not return all inserts. Being conformant, by my definition, means that an append-only change query should return all inserts, whether they were from an INSERT, MERGE or some kind of bulk operation. This will be solved if/when the open-source compute engines make use of the Delta Lake row tracking feature.</p><p class="" style="white-space:pre-wrap;">The CDC support is good, with a straightforward interface. You don’t get to choose between min-delta and full-delta is the only limitation. It will be interesting to see if Apache Iceberg follows suit (by implementing CDC file materialization) at some point, or sticks with a row-lineage-based implementation like Snowflake. Row-lineage is still in the design phase, so it’s early days for Iceberg, but Delta Lake has it right now. If you have any opinions about row-lineage vs CDC file materialization as the basis for CDC, then do let me know!</p><p class="" style="white-space:pre-wrap;">Next in the change query analysis is Apache Hudi.</p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+</div></div></div></div></div>
+      
+    </div>
+
+    <footer class="entry-footer clear">
+      
+      
+      <div class="entry-actions">
+        
+  <span class="sqs-simple-like" data-item-id="66f28d52e8443b353c2f24ba" data-like-count="2">
+    <span class="like-icon"></span>
+    <span class="like-count"></span>
+  </span>
+<span class="squarespace-social-buttons inline-style" data-system-data-id="" data-asset-url="https://static1.squarespace.com/static/56894e581c1210fead06f878/638cdc03652c7d3aa50eea6d/66f28d52e8443b353c2f24ba/1727438633127/" data-record-type="1" data-full-url="/analyses/2024/9/24/change-query-support-in-delta-lake" data-title="Change query support in Delta Lake (3.2.0)"></span>
+      </div>
+    </footer>
+
+    
+
+  </article>
+
+  <div id="comments-66f28d52e8443b353c2f24ba" class="p-comment">
+    
+  </div>
+
+  
+
+  
+  <nav class="pagination clear">
+    <div class="newer"><span class="prev-label">Newer Post</span><a href="/analyses/2024/9/27/change-query-support-in-apache-hudi" rel="prev"><span>Change query support in Apache Hudi (0.15)</span></a></div><!-- comment the linebreak between these two elements because science
+  --><div class="older"><span class="next-label">Older Post</span><a href="/analyses/2024/9/23/change-query-support-in-apache-iceberg-v2" rel="next"><span>Change query support in Apache Iceberg v2</span></a></div>
+  </nav>
+  
+
+</div>
+        </div><!--
+        --><aside id="rightSidebar" role="complementary">
+          <div class="sqs-layout sqs-grid-12 columns-12 open-block-field empty" data-layout-label="Blog Sidebar Content" data-type="block-field" id="blogBlocks-638cdc03652c7d3aa50eea6d"><div class="row sqs-row"><div class="col sqs-col-12 span-12"></div></div></div>
+        </aside>
+        
+        
+      </main>
+
+      <div id="preFooter">
+        <div class="pre-footer-inner">
+          <div class="sqs-layout sqs-grid-12 columns-12" data-layout-label="Pre-Footer Content" data-type="block-field" data-updated-on="1406661050940" id="preFooterBlocks"><div class="row sqs-row"><div class="col sqs-col-12 span-12"></div></div></div>
+        </div>
+      </div>
+
+      <footer id="footer" role="contentinfo">
+        <div class="footer-inner">
+          <div class="nav-wrapper back-to-top-nav"><nav><div class="back-to-top"><a href="#header">Back to Top</a></div></nav></div>
+          
+
+
+          
+          <div class="sqs-layout sqs-grid-12 columns-12" data-layout-label="Footer Content" data-type="block-field" data-updated-on="1467218933704" id="footerBlocks"><div class="row sqs-row"><div class="col sqs-col-12 span-12"><div class="sqs-block html-block sqs-block-html" data-block-type="2" data-sqsp-block="text" id="block-yui_3_17_2_2_1466619395486_6722"><div class="sqs-block-content">
+
+<div class="sqs-html-content" data-sqsp-text-block-content>
+  <p class="text-align-center">Powered by <a target="_blank" href="http://www.squarespace.com?channel=word_of_mouth&amp;subchannel=customer&amp;source=footer&amp;campaign=4fd1028ee4b02be53c65dfb3">Squarespace</a></p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</div></div></div></div></div>
+        </div>
+      </footer>
+
+    </div>
+
+    <script src="https://static1.squarespace.com/static/ta/52a74d9ae4b0253945d2aee9/1054/scripts/site-bundle.js" type="text/javascript"></script>
+    <script data-sqs-type="imageloader-bootstrapper">if(window.ImageLoader) window.ImageLoader.bootstrap({}, document);</script><script>Squarespace.afterBodyLoad(Y);</script>
+
+
+  </body>
+</html>
