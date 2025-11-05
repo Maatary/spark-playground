@@ -1201,7 +1201,10 @@ object Delta8:
         upsertUserQuery.processAllAvailable()
 
 
-
+        TypedEncoder[RawChange[User]]
+            .encoder
+            .schema
+            .printTreeString()
 
         val userChangeDS: Dataset[RowChange[User]] = createCdfDF(spark, tablePath, maxFilesPerTrigger = 2)
             .pipe { cdfDF       => createUnsafeRawChangeDSFor[User](cdfDF) }

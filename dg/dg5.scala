@@ -175,7 +175,7 @@ object dg52:
             .withColumn("value", from_json($"value", TypedEncoder[Flight].encoder.schema, Map("mode" -> "FAILFAST")))
             .select($"value.*")
             .as[Flight]
-            .map(identity) // force deserialization to blow up if schema not respected but not easy to see what is the issue
+            //.map(identity) // force deserialization to blow up if schema not respected but not easy to see what is the issue
             .show(truncate = false)
 
         spark.stop()

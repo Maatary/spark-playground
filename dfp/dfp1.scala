@@ -169,3 +169,63 @@ object DFP2:
 
         spark.stop()
 
+
+
+
+object DFP3:
+
+    Logger.root
+          .clearHandlers()
+          .withHandler(minimumLevel = Some(Level.Error)) // no handler building needed
+          .replace()
+
+    def makeSparkSession: SparkSession =
+        SparkSession
+            .builder()
+            .appName("delta Application")
+            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+            .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+            .config("spark.sql.streaming.stateStore.providerClass", "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
+            .config("spark.sql.shuffle.partitions", 12)
+            .config("spark.hadoop.fs.s3a.aws.credentials.provider", "software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider")
+            .master("local[*]")
+            .getOrCreate()
+
+
+    def main(args: Array[String]): Unit =
+
+        val spark = makeSparkSession
+
+        import spark.implicits.{localSeqToDatasetHolder, rddToDatasetHolder, StringToColumn, symbolToColumn}
+        import _root_.io.github.pashashiz.spark_encoders.TypedEncoder.given
+
+        val rsIdDF = Seq(
+            "rs1026389333",
+            "rs951523830",
+            "rs2521707112",
+            "rs1640862112",
+            "rs1369767662",
+            "rs1419901784",
+            "rs1644023230",
+            "rs1638376373",
+            "rs1230880466",
+            "rs1025529886",
+            "rs226",
+            "rs228",
+            "rs318426",
+            "rs385955",
+            "rs2295766",
+            "rs2295768 "
+        ).toDF
+         .schema
+         .tap(println)
+
+
+
+
+
+        //Thread.sleep(Int.MaxValue)
+
+
+        spark.stop()
+

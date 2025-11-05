@@ -3,8 +3,9 @@ import io.github.pashashiz.spark_encoders.TypedEncoder
 
 import scala.util.chaining.scalaUtilChainingOps
 
+case class Worker(id: Int, workType: String)
 sealed trait Person
-case class Adult(name: String, age: Int, birthday: Option[Int]) extends Person
+case class Adult(name: String, age: Int, birthday: Option[Int], worker: Worker ) extends Person
 case class Child(name: String, age: Int, birthday: Option[Int], guardian: String) extends Person
 case class Senior(name: String, age: Int, birthday: Option[Int], pensionId: String) extends Person
 
@@ -14,6 +15,25 @@ TypedEncoder[Person]
     .schema
     .printTreeString()
 
+//
+//"====== Deserializer" pipe println
+//
+//val enc = TypedEncoder[Adult]
+//
+//val resolvedEnc = enc.encoder.resolveAndBind()
+//
+//resolvedEnc
+//    .deserializer
+//    .dataType
+//
+//resolvedEnc
+//    .deserializer
+//    .numberedTreeString
+//
+//resolvedEnc
+//    .deserializer
+//    .treeString
+//
 
 
 TypedEncoder[Adult]

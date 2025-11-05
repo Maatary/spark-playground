@@ -2,6 +2,8 @@ import io.github.pashashiz.spark_encoders.TypedEncoder
 import org.apache.spark.sql.types.*
 import io.github.pashashiz.spark_encoders.TypedEncoder.given
 
+import scala.util.chaining.scalaUtilChainingOps
+
 /**
  * == Using Manual Schema: StructType ==
  *
@@ -25,6 +27,7 @@ case class A(a: Int, b: Int)
 TypedEncoder[A]
     .encoder
     .schema
+    .tap { println }
     .printTreeString()
 
 
