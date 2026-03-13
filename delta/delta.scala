@@ -3,16 +3,15 @@ import cats.effect.unsafe.implicits.global
 import fs2.io.file.{Files, Path}
 import fs2.Stream
 import cats.syntax.all.*
+import io.delta.implicits.*
 
 import scala.compiletime.uninitialized
-
 import io.github.pashashiz.spark_encoders.TypedEncoder
 import io.delta.tables.DeltaTable
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Encoder, SparkSession}
 import org.apache.spark.sql.functions.*
 import org.apache.spark.sql.streaming.*
 import org.apache.spark.sql.execution.streaming.MemoryStream
-
 import scribe.*
 import scribe.format.*
 
@@ -54,6 +53,8 @@ object Delta1:
         val tablePath = "data/delta/delta1"
 
         deleteTableIfExist(tablePath)
+
+        spark.read.delta("")
 
         spark
             .range(3)
@@ -1164,6 +1165,10 @@ object Delta8:
         val deltaTable      = DeltaTable.forPath(spark, tablePath)
         val memSrc          = MemoryStream[ChangeEvent[User]]
         val userLogChangeDS = createDSFromMemSrcFor[ChangeEvent[User]](memSrc, partition = 1)
+
+        println(s"userLogChangeDS schema: start")
+        userLogChangeDS.printSchema()
+        println(s"userLogChangeDS schema: end")
 
         val upsertUserQuery = runUpsertLogChangeIntoDeltaFor[User](deltaTable, userLogChangeDS)
 
