@@ -63,6 +63,7 @@ object DeltaOverwrite1:
             .read
             .format("delta")
             .load(tablePath)
+            .tap { _.schema }
             .tap { _.show(false) }
 
         readDF
