@@ -29,10 +29,11 @@
 //> using dep "co.fs2::fs2-io:3.12.2"
 
 
-
-//> using dep "com.outr::scribe:3.17.0" // Scribe core
+// Scribe core
+//> using dep "com.outr::scribe:3.17.0"
 //> using dep "com.outr::scribe-cats:3.17.0"
-//> using dep "com.outr::scribe-slf4j2:3.17.0" // SLF4J API façade + Scribe binding
+// SLF4J API façade + Scribe binding
+//> using dep "com.outr::scribe-slf4j2:3.17.0"
 
 
 
