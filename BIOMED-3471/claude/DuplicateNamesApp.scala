@@ -31,7 +31,7 @@ import scala.util.chaining.scalaUtilChainingOps
  * unresolved twin pairs, in which the twin search cannot decide which forward-flow node goes with which backfill node. So
  * the group `several nodes in canonicalRelations, no twin pair` also holds a name that creates only unresolved twin pairs.
  *
- * DuplicateNamesApp reads canonicalRelations and twinPairCountPerHomonymousNodePair of the twin search run 2026-10-30, and
+ * DuplicateNamesApp reads canonicalRelations and twinPairCountPerHomonymousNodePair of the twin search run 2026-10-31, and
  * writes one row for each name of the list in duplicateNamesWithGroup, in the same run folder. At the end, it prints the
  * number of names in each group and in total.
  *
@@ -80,7 +80,7 @@ object DuplicateNamesApp:
         import io.github.pashashiz.spark_encoders.TypedEncoder.given
 
         val duplicateNodeNamesPath                 = "s3a://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/inputs/duplicates.csv"
-        val runPath                                = "s3a://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-30"
+        val runPath                                = "s3a://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-31"
         val canonicalRelationsPath                 = s"$runPath/canonicalRelations"
         val twinPairCountPerHomonymousNodePairPath = s"$runPath/twinPairCountPerHomonymousNodePair"
         val duplicateNamesWithGroupPath            = s"$runPath/duplicateNamesWithGroup"

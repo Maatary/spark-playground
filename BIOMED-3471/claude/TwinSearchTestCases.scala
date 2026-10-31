@@ -14,7 +14,7 @@ import scala.util.chaining.scalaUtilChainingOps
  * Each test case is a few relation occurrences whose canonical relations form one twin pair. TwinSearchTestCases runs steps
  * 1 to 5 of [[DataOps]] on each test case on its own. It prints what the steps must find next to what they find: the twin
  * pair with its two canonical relation IDs and its flag nonIdenticalTwinsAlsoWithinForwardFlow, its
- * nameMatchedNodePairTuples as Spark prints them, the entries of homonymousNodePairs, the rows of
+ * nameMatchedNodePairTuples as Spark prints them, the entries of homonymousNodePairsPerTwinPair, the rows of
  * twinPairCountPerHomonymousNodePair, and the number of unresolved twin pairs.
  *
  * The first nine test cases give at least one example of each rule, A to C, and they include the seven examples in the
@@ -56,7 +56,7 @@ object TwinSearchTestCases:
     /** What steps 1 to 5 find for one test case, or what they must find. */
     case class TestCaseResult(
         twinPairs: List[TwinPairAsPrinted],
-        homonymousNodePairs: List[NameMatchedNodePair],
+        homonymousNodePairsPerTwinPair: List[NameMatchedNodePair],
         twinPairCountPerHomonymousNodePair: List[HomonymousNodePairWithTwinCount],
         unresolvedTwinPairCount: Long
     )
@@ -93,8 +93,11 @@ object TwinSearchTestCases:
             }
             .mkString("[", ", ", "]")
 
-    /** The entries that homonymousNodePairs must hold for a twin pair: the homonymous node pairs of its one tuple, or none when it is unresolved. */
-    def homonymousNodePairsOf(nameMatchedNodePairTuples: List[List[NameMatchedNodePair]]): List[NameMatchedNodePair] =
+    /**
+     * The entries that homonymousNodePairsPerTwinPair must hold for a twin pair: the homonymous node pairs of its one tuple, or none when it is
+     * unresolved.
+     */
+    def homonymousNodePairsPerTwinPairOf(nameMatchedNodePairTuples: List[List[NameMatchedNodePair]]): List[NameMatchedNodePair] =
         nameMatchedNodePairTuples match
             case List(nameMatchedNodePairTuple) => nameMatchedNodePairTuple.filter { nodePair => nodePair.forwardNodeUri != nodePair.backfillNodeUri }
             case _                              => Nil
@@ -137,7 +140,7 @@ object TwinSearchTestCases:
                 .pipe { canonicalRelationsDS => computeNonIdenticalTwinPairs(canonicalRelationsDS) }
                 .pipe { nonIdenticalTwinPairsDF => computeTwinPairsWithNameMatchedNodePairTuples(nonIdenticalTwinPairsDF) }
 
-        val homonymousNodePairsDF = computeHomonymousNodePairs(twinPairsWithNameMatchedNodePairTuplesDF)
+        val homonymousNodePairsPerTwinPairDF = computeHomonymousNodePairsPerTwinPair(twinPairsWithNameMatchedNodePairTuplesDF)
 
         val twinPairs =
             twinPairsWithNameMatchedNodePairTuplesDF
@@ -151,8 +154,8 @@ object TwinSearchTestCases:
                 .collect()
                 .toList
 
-        val homonymousNodePairs =
-            homonymousNodePairsDF
+        val homonymousNodePairsPerTwinPair =
+            homonymousNodePairsPerTwinPairDF
                 .select(col("role"), col("forwardNodeUri"), col("backfillNodeUri"), col("matchedNodeName"))
                 .as[NameMatchedNodePair]
                 .collect()
@@ -160,7 +163,7 @@ object TwinSearchTestCases:
                 .sortBy { nodePair => (nodePair.forwardNodeUri, nodePair.backfillNodeUri, nodePair.role) }
 
         val twinPairCountPerHomonymousNodePair =
-            computeTwinPairCountPerHomonymousNodePair(homonymousNodePairsDF)
+            computeTwinPairCountPerHomonymousNodePair(homonymousNodePairsPerTwinPairDF)
                 .as[HomonymousNodePairWithTwinCount]
                 .collect()
                 .toList
@@ -170,7 +173,7 @@ object TwinSearchTestCases:
             computeTwinPairsWithMultipleNameMatchedNodePairTuples(twinPairsWithNameMatchedNodePairTuplesDF)
                 .count()
 
-        TestCaseResult(twinPairs, homonymousNodePairs, twinPairCountPerHomonymousNodePair, unresolvedTwinPairCount)
+        TestCaseResult(twinPairs, homonymousNodePairsPerTwinPair, twinPairCountPerHomonymousNodePair, unresolvedTwinPairCount)
 
     /** What steps 1 to 5 must find for the twin pair that a test case must give. */
     def expectedResultOf(expectedTwinPair: ExpectedTwinPair): TestCaseResult =
@@ -184,18 +187,18 @@ object TwinSearchTestCases:
                 )
             )
 
-        val homonymousNodePairs =
-            homonymousNodePairsOf(expectedTwinPair.nameMatchedNodePairTuples)
+        val homonymousNodePairsPerTwinPair =
+            homonymousNodePairsPerTwinPairOf(expectedTwinPair.nameMatchedNodePairTuples)
                 .sortBy { nodePair => (nodePair.forwardNodeUri, nodePair.backfillNodeUri, nodePair.role) }
 
         val twinPairCountPerHomonymousNodePair =
-            homonymousNodePairs
+            homonymousNodePairsPerTwinPair
                 .map { nodePair => HomonymousNodePairWithTwinCount(nodePair.forwardNodeUri, nodePair.backfillNodeUri, nodePair.matchedNodeName, 1L) }
                 .distinct
 
         val unresolvedTwinPairCount = if expectedTwinPair.nameMatchedNodePairTuples.size == 2 then 1L else 0L
 
-        TestCaseResult(twinPairs, homonymousNodePairs, twinPairCountPerHomonymousNodePair, unresolvedTwinPairCount)
+        TestCaseResult(twinPairs, homonymousNodePairsPerTwinPair, twinPairCountPerHomonymousNodePair, unresolvedTwinPairCount)
 
     /** Prints one test case: its relation occurrences, then each result that the steps must find next to what they find. */
     def printTestCase(testCaseNumber: Int, testCase: TestCase, expected: TestCaseResult, found: TestCaseResult, passed: Boolean): Unit =
@@ -210,9 +213,9 @@ object TwinSearchTestCases:
             found.twinPairs.map(_.nameMatchedNodePairTuples)
         )
         printExpectedAndFound(
-            "homonymousNodePairs",
-            expected.homonymousNodePairs.map(describeNodePair),
-            found.homonymousNodePairs.map(describeNodePair)
+            "homonymousNodePairsPerTwinPair",
+            expected.homonymousNodePairsPerTwinPair.map(describeNodePair),
+            found.homonymousNodePairsPerTwinPair.map(describeNodePair)
         )
         printExpectedAndFound(
             "twinPairCountPerHomonymousNodePair",

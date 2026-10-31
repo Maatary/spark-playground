@@ -54,13 +54,13 @@ import scala.util.chaining.scalaUtilChainingOps
  *   - Step 5 decides, in each twin pair, which forward-flow node goes with which backfill node. Its results are saved in four tables:
  *     - `twinPairsWithNameMatchedNodePairTuples` holds every twin pair with the result of rules A to C. The result is one answer for a resolved twin
  *       pair, and the two possible answers for an unresolved one.
- *     - `homonymousNodePairs` holds the homonymous node pairs of each resolved twin pair.
+ *     - `homonymousNodePairsPerTwinPair` holds the homonymous node pairs of each resolved twin pair.
  *     - `twinPairCountPerHomonymousNodePair` holds each homonymous node pair once, with the number of twin pairs that give it.
  *     - `twinPairsWithMultipleNameMatchedNodePairTuples` holds the unresolved twin pairs.
  *
  * Each table is read back after it is written, so that the next step starts from the saved table instead of computing the earlier steps again from
  * the input. At the end, TwinSearchApp prints five numbers: the twin pairs, the forward-only canonical relations with at least one non-identical
- * twin, the unresolved twin pairs, the entries of homonymousNodePairs, and the homonymous node pairs.
+ * twin, the unresolved twin pairs, the entries of homonymousNodePairsPerTwinPair, and the homonymous node pairs.
  *
  * Run it from the spark-playground root with a 4 GB heap. The only argument names the run folder under
  * `s3://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/`, and a table that already exists there is replaced.
@@ -114,7 +114,7 @@ object TwinSearchApp:
         val canonicalRelationsPath                             = s"$runPath/canonicalRelations"
         val nonIdenticalTwinPairsPath                          = s"$runPath/nonIdenticalTwinPairs"
         val twinPairsWithNameMatchedNodePairTuplesPath         = s"$runPath/twinPairsWithNameMatchedNodePairTuples"
-        val homonymousNodePairsPath                            = s"$runPath/homonymousNodePairs"
+        val homonymousNodePairsPerTwinPairPath                 = s"$runPath/homonymousNodePairsPerTwinPair"
         val twinPairCountPerHomonymousNodePairPath             = s"$runPath/twinPairCountPerHomonymousNodePair"
         val twinPairsWithMultipleNameMatchedNodePairTuplesPath = s"$runPath/twinPairsWithMultipleNameMatchedNodePairTuples"
 
@@ -139,11 +139,11 @@ object TwinSearchApp:
             .pipe { computeTwinPairsWithNameMatchedNodePairTuples }
             .pipe { df => writeAndReadBackDeltaTable(df, twinPairsWithNameMatchedNodePairTuplesPath) }
 
-        val homonymousNodePairsDF = twinPairsWithNameMatchedNodePairTuplesDF
-            .pipe { computeHomonymousNodePairs }
-            .pipe { df => writeAndReadBackDeltaTable(df, homonymousNodePairsPath) }
+        val homonymousNodePairsPerTwinPairDF = twinPairsWithNameMatchedNodePairTuplesDF
+            .pipe { computeHomonymousNodePairsPerTwinPair }
+            .pipe { df => writeAndReadBackDeltaTable(df, homonymousNodePairsPerTwinPairPath) }
 
-        val twinPairCountPerHomonymousNodePairDF = homonymousNodePairsDF
+        val twinPairCountPerHomonymousNodePairDF = homonymousNodePairsPerTwinPairDF
             .pipe { computeTwinPairCountPerHomonymousNodePair }
             .pipe { df => writeAndReadBackDeltaTable(df, twinPairCountPerHomonymousNodePairPath) }
 
@@ -159,7 +159,7 @@ object TwinSearchApp:
         println(s"twinPairCount=${nonIdenticalTwinPairsDF.count()}")
         println(s"forwardOnlyCanonicalRelationTwinCount=$forwardOnlyCanonicalRelationTwinCount")
         println(s"unresolvedTwinPairCount=${twinPairsWithMultipleNameMatchedNodePairTuplesDF.count()}")
-        println(s"homonymousNodePairEntryCount=${homonymousNodePairsDF.count()}")
+        println(s"homonymousNodePairsPerTwinPairCount=${homonymousNodePairsPerTwinPairDF.count()}")
         println(s"homonymousNodePairCount=${twinPairCountPerHomonymousNodePairDF.count()}")
 
         spark.stop()

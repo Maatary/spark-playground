@@ -52,7 +52,7 @@ object ExploreApp:
 //            .filter($"direction" === "undirected")
 //            .show(10, truncate = false)
 
-//        val canonicalsPath = "s3://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-30/canonicalRelations"
+//        val canonicalsPath = "s3://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-31/canonicalRelations"
 //
 //        val canonicals = spark
 //            .read
@@ -70,7 +70,7 @@ object ExploreApp:
 //        val nonIdenticalTwinPairs = spark
 //            .read
 //            .format("delta")
-//            .load("s3://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-30/nonIdenticalTwinPairs")
+//            .load("s3://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-31/nonIdenticalTwinPairs")
 //            .tap {_.printSchema()}
 //            .tap { _.show(10, truncate = false) }
 //
@@ -103,29 +103,29 @@ object ExploreApp:
         val twinPairsWithNameMatchedNodePairTuples = spark
             .read
             .format("delta")
-            .load("s3a://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-30/twinPairsWithNameMatchedNodePairTuples")
+            .load("s3a://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-31/twinPairsWithNameMatchedNodePairTuples")
             .tap { _.printSchema() }
             .tap { _.show(10, truncate = false) }
             .tap { df => println(s"Twin pairs with name-matched node pair tuples count: ${df.count()}") }
 
 
-        val homonymousNodePairs = spark
+        val homonymousNodePairsPerTwinPair = spark
             .read
             .format("delta")
-            .load("s3a://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-30/homonymousNodePairs")
+            .load("s3a://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-31/homonymousNodePairsPerTwinPair")
             .tap { _.printSchema() }
             .tap { _.show(10, truncate = false) }
-            .tap { df => println(s"Homonymous node pairs count: ${df.count()}") }
+            .tap { df => println(s"Homonymous node pairs per twin pair count: ${df.count()}") }
             .tap { df =>
                 df.select("forwardNodeUri", "backfillNodeUri", "matchedNodeName")
                     .distinct()
-                    .pipe { df => println(s"Distinct homonymous node pairs count: ${df.count()}") }
+                    .pipe { df => println(s"Homonymous node pairs count: ${df.count()}") }
             }
 
 //        val twinPairCountPerHomonymousNodePair = spark
 //            .read
 //            .format("delta")
-//            .load("s3a://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-30/twinPairCountPerHomonymousNodePair")
+//            .load("s3a://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-31/twinPairCountPerHomonymousNodePair")
 //            .tap {_.printSchema()}
 //            .tap { _.show(10, truncate = false) }
 

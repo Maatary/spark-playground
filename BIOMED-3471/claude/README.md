@@ -105,7 +105,7 @@ relation occurrences
   step 3   builds the name key of each canonical relation
   step 4   matches each forward-only canonical relation on its name key    nonIdenticalTwinPairs
   step 5   decides which forward-flow node goes with which backfill node   twinPairsWithNameMatchedNodePairTuples
-           keeps the homonymous node pairs of each resolved twin pair      homonymousNodePairs
+           keeps the homonymous node pairs of each resolved twin pair      homonymousNodePairsPerTwinPair
            counts the twin pairs that give each homonymous node pair       twinPairCountPerHomonymousNodePair
            keeps the twin pairs for which it cannot decide                 twinPairsWithMultipleNameMatchedNodePairTuples
 ```
@@ -245,7 +245,7 @@ rule C3   forward-flow relation E1, E2   backfill twin E3, E4   [[{partner, E1, 
 Step 5 writes four tables from these results:
 
 - `twinPairsWithNameMatchedNodePairTuples` holds every twin pair with its result in `nameMatchedNodePairTuples`: one tuple when the twin pair is resolved, and the two possible answers when it is unresolved.
-- `homonymousNodePairs`, the detail table, holds the homonymous node pairs of each resolved twin pair, one entry each, with the role at which the twin pair gives them. Identical node pairs are left out. Repeated entries stay: a twin pair in which both relations hold a node twice gives the same homonymous node pair twice.
+- `homonymousNodePairsPerTwinPair`, the detail table, holds the homonymous node pairs of each resolved twin pair, one entry each, with the role at which the twin pair gives them. Identical node pairs are left out. Repeated entries stay: a twin pair in which both relations hold a node twice gives the same homonymous node pair twice.
 - `twinPairCountPerHomonymousNodePair`, the global table, holds each homonymous node pair once, with `nonIdenticalTwinPairCount`, the number of distinct twin pairs that give it.
 - `twinPairsWithMultipleNameMatchedNodePairTuples` holds the unresolved twin pairs with their two possible answers. In the first answer, node 1 of the forward-flow relation goes with node 1 of the backfill twin, and node 2 goes with node 2. In the second, node 1 goes with node 2, and node 2 goes with node 1.
 
@@ -265,7 +265,7 @@ For the two examples, the detail table holds one entry each, and the global tabl
 | `canonicalRelations` | Each row holds one canonical relation. | canonicalId, relationship_type, direction, node1_urn, node1_name, node2_urn, node2_name, sources |
 | `nonIdenticalTwinPairs` | Each row holds one twin pair. | forwardCanonicalId, backfillCanonicalId, nonIdenticalTwinsAlsoWithinForwardFlow, forwardTwin, backfillTwin |
 | `twinPairsWithNameMatchedNodePairTuples` | Each row holds one twin pair with the result of step 5. | the five columns of `nonIdenticalTwinPairs`, then nameMatchedNodePairTuples |
-| `homonymousNodePairs`, the detail table | Each row holds one homonymous node pair of one resolved twin pair. | forwardNodeUri, backfillNodeUri, matchedNodeName, role, forwardCanonicalId, backfillCanonicalId, nonIdenticalTwinsAlsoWithinForwardFlow |
+| `homonymousNodePairsPerTwinPair`, the detail table | Each row holds one homonymous node pair of one resolved twin pair. | forwardNodeUri, backfillNodeUri, matchedNodeName, role, forwardCanonicalId, backfillCanonicalId, nonIdenticalTwinsAlsoWithinForwardFlow |
 | `twinPairCountPerHomonymousNodePair`, the global table | Each row holds one homonymous node pair, with the number of twin pairs that give it. | forwardNodeUri, backfillNodeUri, matchedNodeName, nonIdenticalTwinPairCount |
 | `twinPairsWithMultipleNameMatchedNodePairTuples` | Each row holds one unresolved twin pair. | forwardCanonicalId, backfillCanonicalId, nameMatchedNodePairTuples |
 
@@ -276,7 +276,7 @@ For the two examples, the detail table holds one entry each, and the global tabl
 | `twinPairCount` | It counts the twin pairs. |
 | `forwardOnlyCanonicalRelationWithTwinCount` | It counts the forward-only canonical relations with at least one non-identical twin. |
 | `unresolvedTwinPairCount` | It counts the unresolved twin pairs. |
-| `homonymousNodePairEntryCount` | It counts the entries of the detail table. |
+| `homonymousNodePairsPerTwinPairCount` | It counts the rows of the detail table. |
 | `homonymousNodePairCount` | It counts the homonymous node pairs, each one once. |
 
 ## The code

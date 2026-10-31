@@ -373,7 +373,7 @@ object DataOps:
      * Columns: forwardNodeUri, backfillNodeUri, matchedNodeName, role, forwardCanonicalId, backfillCanonicalId,
      * nonIdenticalTwinsAlsoWithinForwardFlow.
      */
-    def computeHomonymousNodePairs(twinPairsWithNameMatchedNodePairTuplesDF: DataFrame): DataFrame =
+    def computeHomonymousNodePairsPerTwinPair(twinPairsWithNameMatchedNodePairTuplesDF: DataFrame): DataFrame =
         val resolvedTwinPair = size(col("nameMatchedNodePairTuples")) === 1 // <-- an unresolved twin pair keeps its two possible answers
         val nodeUrnsDiffer   = col("nameMatchedNodePair.forwardNodeUri") =!= col("nameMatchedNodePair.backfillNodeUri")
 
@@ -407,8 +407,8 @@ object DataOps:
      * Columns: forwardNodeUri, backfillNodeUri, matchedNodeName, nonIdenticalTwinPairCount. One row has the fields of
      * [[DataTypes.HomonymousNodePairWithTwinCount]].
      */
-    def computeTwinPairCountPerHomonymousNodePair(homonymousNodePairsDF: DataFrame): DataFrame =
-        homonymousNodePairsDF
+    def computeTwinPairCountPerHomonymousNodePair(homonymousNodePairsPerTwinPairDF: DataFrame): DataFrame =
+        homonymousNodePairsPerTwinPairDF
             .groupBy(col("forwardNodeUri"), col("backfillNodeUri"), col("matchedNodeName"))
             .agg(countDistinct(col("forwardCanonicalId"), col("backfillCanonicalId")).as("nonIdenticalTwinPairCount"))
 
