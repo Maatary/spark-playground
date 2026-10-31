@@ -1,0 +1,121 @@
+package biomed3471.codexrefactored
+
+import biomed3471.codexrefactored.DataTypes.*
+import org.apache.hadoop.fs.{Path as HadoopPath}
+import org.apache.spark.sql.{DataFrame, SparkSession}
+
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.time.Instant
+import scala.util.Using
+
+/** Input and run configuration with sequential Delta persistence for phase one. */
+object IOOps:
+
+    /**
+     * Forms the fixed personal DEV destination for one investigation run.
+     *
+     * @param config the run configuration
+     * @return the S3 run prefix with a trailing slash
+     */
+    def outputPath(config: RunConfig): String = s"$OutputPrefix${config.runId}/"
+
+    /**
+     * Forms the output path for one of the six agreed phase-one datasets.
+     *
+     * Rejects names outside DatasetNames so generated paths follow the six-table layout.
+     *
+     * @param config the current run
+     * @param datasetName a name from DatasetNames
+     * @return that dataset's S3 directory
+     */
+    def datasetPath(config: RunConfig, datasetName: String): String =
+        require(DatasetNames.contains(datasetName), s"Unknown phase-one dataset: $datasetName")
+        s"${outputPath(config)}$datasetName/"
+
+    /**
+     * Creates the local Spark session using the existing Playground S3 setup.
+     *
+     * Reuses S3A for s3/s3a/s3n and the AWS SDK default credential provider.
+     * Local execution uses all available cores. Partitioned shuffles, disabled
+     * broadcast joins, disk-backed uploads and spill directories manage memory
+     * demand. The JVM heap size is supplied by the launch command.
+     *
+     * @param config run-specific local scratch directory
+     * @return a local Spark session with the existing Delta integration
+     */
+    def makeSparkSession(config: RunConfig): SparkSession =
+        val spill  = Files.createDirectories(config.scratchPath.resolve("spark-spill"))
+        val upload = Files.createDirectories(config.scratchPath.resolve("s3-upload"))
+        SparkSession.builder()
+            .appName(s"BIOMED-3471 direct rules ${config.runId}")
+            .master("local[*]")
+            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+            .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+            .config("spark.hadoop.fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+            .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+            .config("spark.hadoop.fs.s3n.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+            .config("spark.hadoop.fs.s3a.aws.credentials.provider",
+                "software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider")
+            .config("spark.local.dir", spill.toString)
+            .config("spark.driver.maxResultSize", "64m")
+            .config("spark.memory.offHeap.enabled", "false")
+            .config("spark.sql.shuffle.partitions", "256")
+            .config("spark.sql.autoBroadcastJoinThreshold", "-1")
+            .config("spark.sql.adaptive.autoBroadcastJoinThreshold", "-1")
+            .config("spark.sql.adaptive.enabled", "true")
+            .config("spark.sql.adaptive.advisoryPartitionSizeInBytes", "32m")
+            .config("spark.sql.adaptive.coalescePartitions.parallelismFirst", "false")
+            .config("spark.hadoop.fs.s3a.fast.upload.buffer", "disk")
+            .config("spark.hadoop.fs.s3a.fast.upload.active.blocks", "1")
+            .config("spark.hadoop.fs.s3a.buffer.dir", upload.toString)
+            .getOrCreate()
+
+    /**
+     * Reserves a fresh run prefix and refuses to overwrite any existing run.
+     *
+     * Writes a small _STARTED marker after checking that the prefix is absent.
+     * Partial datasets remain under that run if execution fails; a later run
+     * must use a new name.
+     *
+     * @param spark the session carrying the established Hadoop credentials
+     * @param config the new run's destination
+     */
+    def beginRun(spark: SparkSession, config: RunConfig): Unit =
+        val root = new HadoopPath(outputPath(config))
+        val fs   = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
+        require(!fs.exists(root), s"Run prefix already exists; choose a new run folder name: $root")
+        val body = s"started=${Instant.now()}\ninput=${config.inputPath}\nphase=steps-1-through-5\n"
+        Using.resource(fs.create(new HadoopPath(root, "_STARTED"), false)) { stream =>
+            stream.write(body.getBytes(StandardCharsets.UTF_8))
+        }
+
+    /**
+     * Computes a phase-one DataFrame and writes it as a new Delta dataset through Spark.
+     *
+     * The error-if-exists mode prevents replacing prior data. PhaseOneApp calls
+     * these writes sequentially.
+     *
+     * @param data the canonical relations, twin pairs or homonymous node pairs to persist
+     * @param config the current run
+     * @param datasetName the corresponding agreed dataset name
+     */
+    def writeDataset(data: DataFrame, config: RunConfig, datasetName: String): Unit =
+        val path = datasetPath(config, datasetName)
+        println(s"Writing $datasetName to $path")
+        data.write.format("delta").mode("errorifexists").save(path)
+
+    /**
+     * Writes a dataset and returns a new lazy read of its committed Delta output.
+     *
+     * Later steps read the saved table, so their writes do not repeat the
+     * original grouping or twin join.
+     *
+     * @param data the dataset to compute and write
+     * @param config the current run
+     * @param datasetName the agreed output name
+     * @return a DataFrame reading that committed output
+     */
+    def writeAndReadDataset(data: DataFrame, config: RunConfig, datasetName: String): DataFrame =
+        writeDataset(data, config, datasetName)
+        data.sparkSession.read.format("delta").load(datasetPath(config, datasetName))
