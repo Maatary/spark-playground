@@ -263,7 +263,7 @@ Pure operations live in the operations modules; data declarations remain behavio
 
 Historical validation on 30 October 2026 passed 20 explicit twin-pair fixtures, equivalence with the then-present deprecated implementation, source selections, empty/unresolved subsets, schemas and distinct twin-pair counts. That suite checked this implementation's forward-position order and the deprecated implementation's order by node URN separately.
 
-The `2026-10-31` rerun completed with a 4 GiB heap and exit status 0 at 18:13 UTC. All six Delta tables committed beneath `s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/2026-10-31/` with these verified row counts:
+The `2026-10-31` rerun completed with a 4 GiB heap and exit status 0 at 18:34 UTC, taking about 6 minutes 22 seconds. It used the simplified session settings described below: Delta/S3 integration, `local[*]`, eight shuffle partitions and defaults for everything else. All six Delta tables committed beneath `s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/2026-10-31/` with these verified row counts:
 
 | Stored table | Committed row count |
 |---|---:|
@@ -274,7 +274,7 @@ The `2026-10-31` rerun completed with a 4 GiB heap and exit status 0 at 18:13 UT
 | `twinPairCountPerHomonymousNodePair` | 157 |
 | `twinPairsWithMultipleNameMatchedNodePairTuples` | 0 |
 
-Verification of the new Delta commits confirmed these row counts and schemas matching the prior run. Every referenced data file was present with its recorded size. The old detail and summary output prefixes were absent, and the input Delta log was unchanged. No fixture suite or saved-output regression was run for this rerun. This run used the previous session configuration and predates the simplification described below.
+Verification of the new Delta commits confirmed these row counts and schemas matching the prior run. Every referenced data file was present with its recorded size. The old detail and summary output prefixes were absent, and the input Delta log was unchanged. No fixture suite or saved-output regression was run for this rerun.
 
 ```zsh
 cd /Users/maatari/Dev/IdeaProjects/spark-playground
