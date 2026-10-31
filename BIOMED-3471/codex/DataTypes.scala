@@ -1,12 +1,10 @@
 package biomed3471.codex
 
-import java.nio.file.Path
-
 /** Data and configuration for the BIOMED-3471 twin search. */
 object DataTypes:
 
-    /** Delta input location, output date, and local scratch directory. */
-    final case class RunConfig(inputPath: String, runId: String, scratchPath: Path)
+    /** Delta input location and output date. */
+    final case class RunConfig(inputPath: String, runId: String)
 
     val ForwardFlowSource = "Elsevier ML NLP"
     val BackfillSource    = "Elsevier Medscan NLP"

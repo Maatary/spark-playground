@@ -1,7 +1,7 @@
 package biomed3471.codex
 
+import biomed3471.codex.IOOps.makeSparkSession
 import io.github.pashashiz.spark_encoders.TypedEncoder.given
-import org.apache.spark.sql.SparkSession
 import scribe.{Level, Logger}
 import sparkops.SchemaEnforcementOps.*
 
@@ -13,21 +13,6 @@ object ExploreApp:
         .clearHandlers()
         .withHandler(minimumLevel = Some(Level.Error))
         .replace()
-
-    def makeSparkSession: SparkSession =
-        SparkSession
-            .builder()
-            .appName("BIOMED-3471 Codex exploration")
-            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
-            .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
-            .config("spark.sql.streaming.stateStore.providerClass", "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
-            .config("spark.hadoop.fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
-            .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
-            .config("spark.hadoop.fs.s3n.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
-            .config("spark.hadoop.fs.s3a.aws.credentials.provider", "software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider")
-            .config("spark.sql.shuffle.partitions", 12)
-            .master("local[*]")
-            .getOrCreate()
 
     def main(args: Array[String]): Unit =
         val spark = makeSparkSession

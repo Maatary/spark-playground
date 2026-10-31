@@ -5,7 +5,6 @@ import biomed3471.codex.DataTypes.*
 import biomed3471.codex.IOOps.*
 import io.delta.implicits.*
 
-import java.nio.file.Paths
 import java.time.LocalDate
 import scala.util.chaining.*
 
@@ -36,11 +35,10 @@ object TwinSearchApp:
         LocalDate.parse(runId)
         val config = RunConfig(
             inputPath = DefaultInputPath,
-            runId = runId,
-            scratchPath = Paths.get(System.getProperty("java.io.tmpdir"), "biomed3471-codex", runId)
+            runId = runId
         )
 
-        val spark = makeSparkSession(config)
+        val spark = makeSparkSession
         try
             spark.sparkContext.setLogLevel("WARN")
             beginRun(spark, config)

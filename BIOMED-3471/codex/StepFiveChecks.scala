@@ -1,12 +1,11 @@
 package biomed3471.codex
 
 import biomed3471.codex.DataOps.*
-import biomed3471.codex.DataTypes.{BackfillSource, DatasetNames, DefaultInputPath, ForwardFlowSource, OutputPrefix, RunConfig}
+import biomed3471.codex.DataTypes.{BackfillSource, DatasetNames, ForwardFlowSource, OutputPrefix}
 import biomed3471.codex.IOOps.makeSparkSession
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.types.*
 
-import java.nio.file.Files
 import java.time.LocalDate
 import java.util.Locale
 import scala.jdk.CollectionConverters.*
@@ -716,9 +715,7 @@ object StepFiveChecks:
             case "--baseline-run" :: runId :: Nil if runId.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}") =>
                 Some(LocalDate.parse(runId).toString)
             case _ => throw new IllegalArgumentException("Usage: StepFiveChecks [--baseline-run YYYY-MM-DD]")
-        val scratch = Files.createTempDirectory("biomed3471-codex-step-five-checks-")
-        val config = RunConfig(DefaultInputPath, "step-five-checks", scratch)
-        val spark = makeSparkSession(config)
+        val spark = makeSparkSession
         try
             spark.sparkContext.setLogLevel("ERROR")
             StepFiveCheckOps.runFixtures(spark)

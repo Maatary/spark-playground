@@ -5,7 +5,6 @@ import org.apache.hadoop.fs.{Path as HadoopPath}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 import java.nio.charset.StandardCharsets
-import java.nio.file.Files
 import java.time.Instant
 import scala.util.Using
 
@@ -37,39 +36,26 @@ object IOOps:
      * Creates the local Spark session using the existing Playground S3 setup.
      *
      * Reuses S3A for s3/s3a/s3n and the AWS SDK default credential provider.
-     * Local execution uses all available cores. The 32 MiB input partition limit,
-     * partitioned shuffles, disabled broadcast joins, disk-backed uploads and spill directories manage memory
-     * demand. The JVM heap size is supplied by the launch command.
+     * Uses Claude's local session settings, with eight shuffle partitions and all
+     * available cores. Retains the 32 MiB file-scan limit that allowed canonical
+     * aggregation to complete with a 4 GiB heap. The heap size is supplied by the launch command.
      *
-     * @param config run-specific local scratch directory
      * @return a local Spark session with the existing Delta integration
      */
-    def makeSparkSession(config: RunConfig): SparkSession =
-        val spill  = Files.createDirectories(config.scratchPath.resolve("spark-spill"))
-        val upload = Files.createDirectories(config.scratchPath.resolve("s3-upload"))
+    def makeSparkSession: SparkSession =
         SparkSession.builder()
-            .appName(s"BIOMED-3471 Codex ${config.runId}")
-            .master("local[*]")
+            .appName("BIOMED-3471 Codex")
             .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
             .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+            .config("spark.sql.streaming.stateStore.providerClass", "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
             .config("spark.hadoop.fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
             .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
             .config("spark.hadoop.fs.s3n.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
             .config("spark.hadoop.fs.s3a.aws.credentials.provider",
                 "software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider")
-            .config("spark.local.dir", spill.toString)
-            .config("spark.driver.maxResultSize", "64m")
-            .config("spark.memory.offHeap.enabled", "false")
             .config("spark.sql.files.maxPartitionBytes", "32m")
-            .config("spark.sql.shuffle.partitions", "256")
-            .config("spark.sql.autoBroadcastJoinThreshold", "-1")
-            .config("spark.sql.adaptive.autoBroadcastJoinThreshold", "-1")
-            .config("spark.sql.adaptive.enabled", "true")
-            .config("spark.sql.adaptive.advisoryPartitionSizeInBytes", "32m")
-            .config("spark.sql.adaptive.coalescePartitions.parallelismFirst", "false")
-            .config("spark.hadoop.fs.s3a.fast.upload.buffer", "disk")
-            .config("spark.hadoop.fs.s3a.fast.upload.active.blocks", "1")
-            .config("spark.hadoop.fs.s3a.buffer.dir", upload.toString)
+            .config("spark.sql.shuffle.partitions", 8)
+            .master("local[*]")
             .getOrCreate()
 
     /**
