@@ -1,6 +1,6 @@
-package biomed3471.codex
+package biomed3471.codexdeprecated
 
-import biomed3471.codex.DataTypes.*
+import biomed3471.codexdeprecated.DataTypes.*
 
 import java.lang.management.ManagementFactory
 import java.nio.charset.StandardCharsets
@@ -31,7 +31,7 @@ object RuntimeOps:
         val supplied = ManagementFactory.getRuntimeMXBean.getInputArguments.asScala.toSet
         val missing  = RequiredJvmOptions.filterNot(supplied.contains)
         require(missing.isEmpty,
-            s"Missing analysis JVM limits: ${missing.mkString(" ")}. See BIOMED-3471/Codex/README.md.")
+            s"Missing analysis JVM limits: ${missing.mkString(" ")}. See BIOMED-3471/CodexDeprecated/README.md.")
 
     /**
      * Reads resident memory for the current analysis JVM on the user's macOS host.

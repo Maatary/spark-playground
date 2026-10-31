@@ -1,6 +1,6 @@
-package biomed3471.codexrefactored
+package biomed3471.codex
 
-import biomed3471.codexrefactored.DataTypes.*
+import biomed3471.codex.DataTypes.*
 import org.apache.hadoop.fs.{Path as HadoopPath}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
@@ -9,7 +9,7 @@ import java.nio.file.Files
 import java.time.Instant
 import scala.util.Using
 
-/** Input and run configuration with sequential Delta persistence for phase one. */
+/** Input and run configuration with sequential Delta persistence for the twin search. */
 object IOOps:
 
     /**
@@ -21,7 +21,7 @@ object IOOps:
     def outputPath(config: RunConfig): String = s"$OutputPrefix${config.runId}/"
 
     /**
-     * Forms the output path for one of the six agreed phase-one datasets.
+     * Forms the output path for one of the six output datasets.
      *
      * Rejects names outside DatasetNames so generated paths follow the six-table layout.
      *
@@ -30,7 +30,7 @@ object IOOps:
      * @return that dataset's S3 directory
      */
     def datasetPath(config: RunConfig, datasetName: String): String =
-        require(DatasetNames.contains(datasetName), s"Unknown phase-one dataset: $datasetName")
+        require(DatasetNames.contains(datasetName), s"Unknown dataset: $datasetName")
         s"${outputPath(config)}$datasetName/"
 
     /**
@@ -48,7 +48,7 @@ object IOOps:
         val spill  = Files.createDirectories(config.scratchPath.resolve("spark-spill"))
         val upload = Files.createDirectories(config.scratchPath.resolve("s3-upload"))
         SparkSession.builder()
-            .appName(s"BIOMED-3471 direct rules ${config.runId}")
+            .appName(s"BIOMED-3471 Codex ${config.runId}")
             .master("local[*]")
             .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
             .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
@@ -75,8 +75,8 @@ object IOOps:
      * Reserves a fresh run prefix and refuses to overwrite any existing run.
      *
      * Writes a small _STARTED marker after checking that the prefix is absent.
-     * Partial datasets remain under that run if execution fails; a later run
-     * must use a new name.
+     * Partial datasets remain if execution fails. Rerunning the same date
+     * requires explicit cleanup of that date's output first.
      *
      * @param spark the session carrying the established Hadoop credentials
      * @param config the new run's destination
@@ -84,16 +84,16 @@ object IOOps:
     def beginRun(spark: SparkSession, config: RunConfig): Unit =
         val root = new HadoopPath(outputPath(config))
         val fs   = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
-        require(!fs.exists(root), s"Run prefix already exists; choose a new run folder name: $root")
+        require(!fs.exists(root), s"Output already exists for this date: $root. Choose an unused date or explicitly clean this date's output before rerunning.")
         val body = s"started=${Instant.now()}\ninput=${config.inputPath}\nphase=steps-1-through-5\n"
         Using.resource(fs.create(new HadoopPath(root, "_STARTED"), false)) { stream =>
             stream.write(body.getBytes(StandardCharsets.UTF_8))
         }
 
     /**
-     * Computes a phase-one DataFrame and writes it as a new Delta dataset through Spark.
+     * Computes a DataFrame and writes it as a new Delta dataset through Spark.
      *
-     * The error-if-exists mode prevents replacing prior data. PhaseOneApp calls
+     * The error-if-exists mode prevents replacing prior data. TwinSearchApp calls
      * these writes sequentially.
      *
      * @param data the canonical relations, twin pairs or homonymous node pairs to persist

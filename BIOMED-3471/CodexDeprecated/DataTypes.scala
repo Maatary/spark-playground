@@ -1,4 +1,4 @@
-package biomed3471.codex
+package biomed3471.codexdeprecated
 
 import org.apache.spark.sql.DataFrame
 
@@ -6,7 +6,7 @@ import java.nio.file.Path
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.atomic.AtomicLong
 
-/** Data and configuration for the BIOMED-3471 phase-one investigation. */
+/** Data and configuration for the deprecated BIOMED-3471 twin search. */
 object DataTypes:
 
     /**
@@ -39,7 +39,7 @@ object DataTypes:
         backfillOnly: DataFrame
     )
 
-    /** Delta input location, unique output run, and local scratch directory. */
+    /** Delta input location, output date, and local scratch directory. */
     final case class RunConfig(inputPath: String, runId: String, scratchPath: Path)
 
     /** Runtime monitor state; operations remain in RuntimeOps. */
@@ -62,7 +62,7 @@ object DataTypes:
     val DefaultInputPath =
         "s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/wytze-relation-occurrences/"
 
-    val OutputPrefix = "s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/"
+    val OutputPrefix = "s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/deprecated/"
 
     val GiB                   = 1024L * 1024L * 1024L
     val MaximumHeapBytes      = 2L * GiB

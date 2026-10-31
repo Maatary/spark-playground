@@ -1,13 +1,13 @@
-package biomed3471.codex
+package biomed3471.codexdeprecated
 
-import biomed3471.codex.DataOps.*
-import biomed3471.codex.IOOps.*
+import biomed3471.codexdeprecated.DataOps.*
+import biomed3471.codexdeprecated.IOOps.*
 
 import java.nio.file.Files
 import scala.util.chaining.*
 
-/** Entry point for the reviewed BIOMED-3471 steps 1–5 pipeline. */
-object PhaseOneApp:
+/** Entry point for the deprecated BIOMED-3471 steps 1–5 pipeline. */
+object TwinSearchApp:
 
     /**
      * Finds the non-identical twins of forward-only canonical relations in backfill,
@@ -64,7 +64,7 @@ object PhaseOneApp:
      * is performed. Spark closes on failure, and success is reported only after
      * all writes and Spark shutdown complete successfully.
      *
-     * @param args --run <unique-name> [--input <delta-location>] [--scratch <directory>]
+     * @param args --run <YYYY-MM-DD> [--input <delta-location>] [--scratch <directory>]
      */
     def main(args: Array[String]): Unit =
         val config = parseArguments(args)
@@ -105,4 +105,4 @@ object PhaseOneApp:
             // _DATASETS_COMMITTED remains disabled alongside RuntimeOps.
         finally spark.stop()
 
-        println(s"Phase one completed: ${outputPath(config)}")
+        println(s"Deprecated twin search completed: ${outputPath(config)}")

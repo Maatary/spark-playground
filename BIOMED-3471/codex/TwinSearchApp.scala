@@ -1,15 +1,16 @@
-package biomed3471.codexrefactored
+package biomed3471.codex
 
-import biomed3471.codexrefactored.DataOps.*
-import biomed3471.codexrefactored.DataTypes.*
-import biomed3471.codexrefactored.IOOps.*
+import biomed3471.codex.DataOps.*
+import biomed3471.codex.DataTypes.*
+import biomed3471.codex.IOOps.*
 import io.delta.implicits.*
 
 import java.nio.file.Paths
+import java.time.LocalDate
 import scala.util.chaining.*
 
 /** Entry point for the BIOMED-3471 steps 1–5 pipeline. */
-object PhaseOneApp:
+object TwinSearchApp:
 
     /**
      * Finds the non-identical twins of forward-only canonical relations in backfill,
@@ -17,7 +18,7 @@ object PhaseOneApp:
      * includes canonical relations shared with the forward flow.
      *
      * Reads the relation-occurrence Delta source configured by DefaultInputPath
-     * and uses the supplied run folder name beneath OutputPrefix. See the
+     * and uses the supplied date beneath OutputPrefix. See the
      * <a href="README.md#direct-domain-rules">direct domain rules</a> for matching
      * and the <a href="README.md#six-saved-delta-tables">six-table overview</a>
      * for each output's contents and purpose.
@@ -27,14 +28,16 @@ object PhaseOneApp:
      * computing earlier stages again. Spark closes after the pipeline finishes or
      * fails; completion is reported only after all writes and Spark shutdown succeed.
      *
-     * @param args the run folder name as the only argument
+     * @param args the run date, YYYY-MM-DD, as the only argument
      */
     def main(args: Array[String]): Unit =
         val runId = args(0)
+        require(runId.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}"), "Run date must be YYYY-MM-DD.")
+        LocalDate.parse(runId)
         val config = RunConfig(
             inputPath = DefaultInputPath,
             runId = runId,
-            scratchPath = Paths.get(System.getProperty("java.io.tmpdir"), "biomed3471-codexrefactored", runId)
+            scratchPath = Paths.get(System.getProperty("java.io.tmpdir"), "biomed3471-codex", runId)
         )
 
         val spark = makeSparkSession(config)
@@ -68,4 +71,4 @@ object PhaseOneApp:
 
         finally spark.stop()
 
-        println(s"Phase one completed: ${outputPath(config)}")
+        println(s"Twin search completed: ${outputPath(config)}")

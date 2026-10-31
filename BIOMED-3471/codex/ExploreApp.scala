@@ -1,4 +1,4 @@
-package biomed3471.codexrefactored
+package biomed3471.codex
 
 import io.github.pashashiz.spark_encoders.TypedEncoder.given
 import org.apache.spark.sql.SparkSession
@@ -17,7 +17,7 @@ object ExploreApp:
     def makeSparkSession: SparkSession =
         SparkSession
             .builder()
-            .appName("ExploreApp")
+            .appName("BIOMED-3471 Codex exploration")
             .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
             .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
             .config("spark.sql.streaming.stateStore.providerClass", "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
@@ -34,13 +34,13 @@ object ExploreApp:
 
         val relationOccurrencePath = "s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/wytze-relation-occurrences/"
 
-        spark.read.parquet(relationOccurrencePath)
+        spark.read.format("delta").load(relationOccurrencePath)
             .tap { _.printSchema() }
 
         val nonIdenticalTwinPairs = spark
             .read
             .format("delta")
-            .load("s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/2026-10-30-phase-one-refactored-144734/nonIdenticalTwinPairs/")
+            .load("s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/2026-10-31/nonIdenticalTwinPairs/")
             .tap {_.printSchema()}
             .tap{ _.show(10, truncate = false) }
 

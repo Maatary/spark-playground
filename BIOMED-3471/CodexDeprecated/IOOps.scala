@@ -1,49 +1,50 @@
-package biomed3471.codex
+package biomed3471.codexdeprecated
 
-import biomed3471.codex.DataTypes.*
+import biomed3471.codexdeprecated.DataTypes.*
 import org.apache.hadoop.fs.{Path as HadoopPath}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
-import java.time.Instant
+import java.time.{Instant, LocalDate}
 import scala.util.Using
 
-/** Input and run configuration with sequential Delta persistence for phase one. */
+/** Input and run configuration with sequential Delta persistence for the deprecated twin search. */
 object IOOps:
 
     /**
-     * Parses a unique run name, optional Delta input location and local scratch path.
+     * Parses an output date, optional Delta input location and local scratch path.
      *
      * S3 output is fixed to the user's personal DEV investigation prefix.
-     * Run names are single path components. The input defaults to the shared
+     * Dates use YYYY-MM-DD. The input defaults to the shared
      * S3 Delta source and is retained verbatim for Spark. Scratch defaults to a
      * run-specific local temporary folder.
      * No file, Spark session or S3 object is created while parsing.
      *
-     * @param args --run <name> [--input <delta-location>] [--scratch <local-directory>]
-     * @return the Delta input location, unique S3 run component and local scratch path
+     * @param args --run <YYYY-MM-DD> [--input <delta-location>] [--scratch <local-directory>]
+     * @return the Delta input location, output date and local scratch path
      */
     def parseArguments(args: Array[String]): RunConfig =
-        val usage = "Usage: --run <unique-name> [--input <delta-location>] [--scratch <local-directory>]"
+        val usage = "Usage: --run <YYYY-MM-DD> [--input <delta-location>] [--scratch <local-directory>]"
         require(args.length % 2 == 0, usage)
         val pairs = args.toList.grouped(2).map(pair => pair.head -> pair(1)).toList
         require(pairs.map(_._1).distinct.size == pairs.size, "Each argument may appear only once.")
         require(pairs.forall { case (key, _) => Set("--run", "--input", "--scratch").contains(key) }, usage)
         val options = pairs.toMap
         val runId   = options.getOrElse("--run", throw new IllegalArgumentException(usage))
-        require(runId.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,79}"), "Run name must be one safe path component of at most 80 characters.")
+        require(runId.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}"), "Run date must be YYYY-MM-DD.")
+        LocalDate.parse(runId)
         val input   = options.getOrElse("--input", DefaultInputPath)
         val scratch = options.get("--scratch")
             .map(Paths.get(_))
-            .getOrElse(Paths.get(System.getProperty("java.io.tmpdir"), "biomed3471-codex", runId))
+            .getOrElse(Paths.get(System.getProperty("java.io.tmpdir"), "biomed3471-codexdeprecated", runId))
             .toAbsolutePath.normalize()
         RunConfig(input, runId, scratch)
 
     /**
      * Forms the fixed personal DEV destination for one investigation run.
      *
-     * The validated run component is appended without accepting arbitrary
+     * The validated date is appended without accepting arbitrary
      * buckets or prefixes from the command line.
      *
      * @param config the parsed run configuration
@@ -52,7 +53,7 @@ object IOOps:
     def outputPath(config: RunConfig): String = s"$OutputPrefix${config.runId}/"
 
     /**
-     * Forms the output path for one of the six agreed phase-one datasets.
+     * Forms the output path for one of the six output datasets.
      *
      * Rejects unknown dataset names so every write belongs to the documented
      * layout and preserves its intended relation/twin/node-pair unit.
@@ -62,7 +63,7 @@ object IOOps:
      * @return that dataset's S3 directory
      */
     def datasetPath(config: RunConfig, datasetName: String): String =
-        require(DatasetNames.contains(datasetName), s"Unknown phase-one dataset: $datasetName")
+        require(DatasetNames.contains(datasetName), s"Unknown dataset: $datasetName")
         s"${outputPath(config)}$datasetName/"
 
     /**
@@ -80,7 +81,7 @@ object IOOps:
         val spill  = Files.createDirectories(config.scratchPath.resolve("spark-spill"))
         val upload = Files.createDirectories(config.scratchPath.resolve("s3-upload"))
         SparkSession.builder()
-            .appName(s"BIOMED-3471 phase one ${config.runId}")
+            .appName(s"BIOMED-3471 CodexDeprecated ${config.runId}")
             .master("local[*]")
             .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
             .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
@@ -121,8 +122,8 @@ object IOOps:
      * Reserves a fresh run prefix and refuses to overwrite any existing run.
      *
      * Writes a small _STARTED marker after checking that the prefix is absent.
-     * Partial datasets remain under that run if execution fails; a later run
-     * must use a new name. This does not delete or modify any prior output.
+     * Partial datasets remain if execution fails. Rerunning the same date
+     * requires explicit cleanup of that date's output first.
      *
      * @param spark the session carrying the established Hadoop credentials
      * @param config the new run's destination
@@ -130,14 +131,14 @@ object IOOps:
     def beginRun(spark: SparkSession, config: RunConfig): Unit =
         val root = new HadoopPath(outputPath(config))
         val fs   = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
-        require(!fs.exists(root), s"Run prefix already exists; choose a new --run name: $root")
+        require(!fs.exists(root), s"Output already exists for this date: $root. Choose an unused date or explicitly clean this date's output before rerunning.")
         val body = s"started=${Instant.now()}\ninput=${config.inputPath}\nphase=steps-1-through-5\n"
         Using.resource(fs.create(new HadoopPath(root, "_STARTED"), false)) { stream =>
             stream.write(body.getBytes(StandardCharsets.UTF_8))
         }
 
     /**
-     * Materializes one phase-one DataFrame as a new Delta dataset through Spark.
+     * Materializes one DataFrame as a new Delta dataset through Spark.
      *
      * The error-if-exists mode prevents replacing prior data. Writes are called
      * sequentially and use the distributed writer, without collecting to the
@@ -168,12 +169,12 @@ object IOOps:
         data.sparkSession.read.format("delta").load(datasetPath(config, datasetName))
 
     /**
-     * Records that all six phase-one datasets have been committed when invoked.
+     * Records that all six output datasets have been committed when invoked.
      *
      * Records each output path and the sampled JVM peak in a small text marker.
      * _STARTED is retained as the start record. _DATASETS_COMMITTED records
      * successful dataset writes, independently of subsequent Spark shutdown.
-     * PhaseOneApp leaves this operation disabled alongside RuntimeOps, so its
+     * TwinSearchApp leaves this operation disabled alongside RuntimeOps, so its
      * current execution writes neither this marker nor a local memory report.
      *
      * @param spark the active session

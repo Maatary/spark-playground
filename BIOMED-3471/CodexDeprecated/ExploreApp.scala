@@ -1,4 +1,4 @@
-package biomed3471.codex
+package biomed3471.codexdeprecated
 
 import org.apache.spark.sql.SparkSession
 import scribe.{Level, Logger}
@@ -15,7 +15,7 @@ object ExploreApp:
     def makeSparkSession: SparkSession =
         SparkSession
             .builder()
-            .appName("ExploreApp")
+            .appName("BIOMED-3471 CodexDeprecated exploration")
             .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
             .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
             .config("spark.sql.streaming.stateStore.providerClass", "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
@@ -30,15 +30,15 @@ object ExploreApp:
     def main(args: Array[String]): Unit =
         val spark = makeSparkSession
 
-        val relationOccurrencePath = "s3a://canary-data-science/wytze/BCE_validation_September_2026_II/relationships_08-10-2026.parquet"
+        val relationOccurrencePath = "s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/wytze-relation-occurrences/"
 
-        spark.read.parquet(relationOccurrencePath)
+        spark.read.format("delta").load(relationOccurrencePath)
             .tap { _.printSchema() }
 
 //        val nonIdenticalTwinPairs = spark
 //            .read
 //            .format("delta")
-//            .load("s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/2026-10-21-phase-one-230855/nonIdenticalTwinPairs/")
+//            .load("s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/deprecated/2026-10-30/nonIdenticalTwinPairs/") // Example path for a deprecated run.
 //            //.tap {_.printSchema()}
 //            //.tap{ _.show(10, truncate = false) }
 //

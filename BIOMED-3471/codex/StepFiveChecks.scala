@@ -1,13 +1,14 @@
-package biomed3471.codexrefactored
+package biomed3471.codex
 
-import biomed3471.codex.DataOps as ExhaustiveDataOps
-import biomed3471.codexrefactored.DataOps.*
-import biomed3471.codexrefactored.DataTypes.{BackfillSource, DatasetNames, DefaultInputPath, ForwardFlowSource, OutputPrefix, RunConfig}
-import biomed3471.codexrefactored.IOOps.makeSparkSession
+import biomed3471.codexdeprecated.DataOps as ExhaustiveDataOps
+import biomed3471.codex.DataOps.*
+import biomed3471.codex.DataTypes.{BackfillSource, DatasetNames, DefaultInputPath, ForwardFlowSource, OutputPrefix, RunConfig}
+import biomed3471.codex.IOOps.makeSparkSession
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.types.*
 
 import java.nio.file.Files
+import java.time.LocalDate
 import java.util.Locale
 import scala.jdk.CollectionConverters.*
 
@@ -36,8 +37,6 @@ private object StepFiveCheckData:
     /** Counts tuples by their node-pair contents, with repeated node-pair records counted inside each tuple. */
     type ResultMultiset = Map[Map[Row, Int], Int]
 
-    val BaselineRun = "2026-10-21-phase-one-230855"
-    val HistoricalLayoutRun = "2026-10-21-phase-one-215353"
     val MaximumCheckedRows = 10000
 
     val RelationSchema = StructType(Vector(
@@ -112,7 +111,7 @@ private object StepFiveCheckData:
     val CarbonicAnhydraseForward = Node("biodata:functionalclass/EC_4.2.1.1", "carbonic anhydrase")
     val CarbonicAnhydraseBackfill = Node("biodata:functionalclass/PROTYP601", "carbonic anhydrase")
 
-/** Fixture construction, assertions and bounded historical-output comparisons. */
+/** Fixture construction, assertions and bounded saved-output comparisons. */
 private object StepFiveCheckOps:
     import StepFiveCheckData.*
 
@@ -346,7 +345,7 @@ private object StepFiveCheckOps:
      * Creates a local DataFrame with an explicit schema, including empty inputs.
      *
      * @param spark the single check session
-     * @param rows bounded fixture or historical-result rows
+     * @param rows bounded fixture or saved-result rows
      * @param schema exact expected input shape
      * @return a small DataFrame; no encoder, external read or write is used
      */
@@ -356,7 +355,7 @@ private object StepFiveCheckOps:
     /**
      * Collects only a bounded check result, rejecting an unexpectedly large input.
      *
-     * @param data fixture or historical Step 5 result, never the occurrence export
+     * @param data fixture or saved Step 5 result, never the occurrence export
      * @param label name for a size-limit failure
      * @return at most MaximumCheckedRows rows, including repeated rows
      */
@@ -441,7 +440,7 @@ private object StepFiveCheckOps:
     /**
      * Executes the unchanged original Spark implementation on the same input.
      *
-     * Calls the actual Codex operations rather than reproducing their algorithm
+     * Calls biomed3471.codexdeprecated.DataOps through ExhaustiveDataOps rather than reproducing its algorithm
      * in the checks. The old and new implementations keep separate namespaces.
      *
      * @param input the same bounded twin-pair rows used by the direct implementation
@@ -544,7 +543,7 @@ private object StepFiveCheckOps:
         }
 
     /**
-     * Calculates the expected global counts from a limited number of expected or historical detail rows.
+     * Calculates the expected global counts from a limited number of expected or saved detail rows.
      *
      * Counts distinct (forwardCanonicalId, backfillCanonicalId) pairs in ordinary Scala sets, independently of the Spark aggregation. Both canonical
      * relation IDs identify the twin pair, so repeated detail entries from one twin pair contribute once. Role and flag do not split node-pair groups.
@@ -713,12 +712,12 @@ private object StepFiveCheckOps:
         println(s"PASS fixtures: ${realFixtures.size + syntheticFixtures.size} explicit twins, direct/exhaustive equivalence, source selections, empty/unresolved subsets, schemas and complete-twin counts")
 
     /**
-     * Reads one bounded historical result table outside the new output registry.
+     * Reads one bounded result table from the selected dated baseline.
      * Renames the older forward/backfill twin columns to forwardTwin/backfillTwin when present.
      *
      * @param spark existing session using the established credential provider
-     * @param runId historical run selected by the caller
-     * @param table historical Step 5 table name, explicitly selected in code
+     * @param runId baseline date selected by the caller in YYYY-MM-DD format
+     * @param table Step 5 table name, explicitly selected in code
      * @return a local DataFrame containing at most MaximumCheckedRows saved rows
      */
     private def readBaseline(spark: SparkSession, runId: String, table: String): DataFrame =
@@ -728,27 +727,22 @@ private object StepFiveCheckOps:
         frame(spark, smallRows(data, s"baseline $table"), data.schema)
 
     /**
-     * Checks that Step 5 results match the saved outputs, using their historical or current table names.
+     * Checks that Step 5 results match the selected dated baseline's saved outputs.
      *
-     * BaselineRun uses the final names. HistoricalLayoutRun predates them: its detailed
-     * entries are homonymousNodePairsByTwin and its summary is homonymousNodePairs.
-     * Other supplied runs use homonymousNodePairs for detail and homonymousNodePairsWithTwinCount for the summary. Reads
-     * each small saved table once, compares name-matched node pair tuples and metadata,
+     * Reads each small saved table once, compares name-matched node pair tuples and metadata,
      * checks how many times each detail row appears, and independently counts distinct
      * twin pairs from saved detail. Also compares the direct and unchanged exhaustive
      * implementations on those same saved twin pairs. The occurrence export and
      * writers are never used.
      *
      * @param spark the same session already used for fixtures
-     * @param runId safe historical run component under OutputPrefix
+     * @param runId baseline date in YYYY-MM-DD format under OutputPrefix
      */
     def runBaseline(spark: SparkSession, runId: String): Unit =
         val twins = readBaseline(spark, runId, "nonIdenticalTwinPairs")
-        val detailTable = if runId == HistoricalLayoutRun then "homonymousNodePairsByTwin" else "homonymousNodePairs"
-        val summaryTable = if runId == HistoricalLayoutRun then "homonymousNodePairs" else "homonymousNodePairsWithTwinCount"
         val savedFull = readBaseline(spark, runId, "twinPairsWithNameMatchedNodePairTuples")
-        val savedDetail = readBaseline(spark, runId, detailTable)
-        val savedSummary = readBaseline(spark, runId, summaryTable)
+        val savedDetail = readBaseline(spark, runId, "homonymousNodePairs")
+        val savedSummary = readBaseline(spark, runId, "homonymousNodePairsWithTwinCount")
         val savedUnresolved = readBaseline(spark, runId, "twinPairsWithMultipleNameMatchedNodePairTuples")
         checkSchema("saved full results", savedFull, FullSchema)
         checkSchema("saved detail", savedDetail, DetailSchema)
@@ -777,17 +771,9 @@ private object StepFiveCheckOps:
         require(actual.unresolved.size == unresolvedRows.size && actual.unresolved.map(twinId).toSet == expectedUnresolved.keySet,
             "Baseline unresolved subset differs")
         actual.unresolved.foreach(row => require(resultMultiset(results(row)) == expectedUnresolved(twinId(row)), "Baseline unresolved alternatives differ"))
-        if Set(BaselineRun, HistoricalLayoutRun).contains(runId) then
-            require((actual.full.size, actual.detail.size, actual.global.size, actual.unresolved.size) == (1911, 1942, 157, 0),
-                "Pinned baseline counts differ from recorded evidence")
-            val counts = actual.global.map(row => (row.getString(0), row.getString(1)) -> row.getLong(3)).toMap
-            require(counts((LuteolinForward.uri, LuteolinBackfill.uri)) == 66L &&
-                counts((DorzolamideForward.uri, DorzolamideBackfill.uri)) == 2L &&
-                counts((CarbonicAnhydraseForward.uri, CarbonicAnhydraseBackfill.uri)) == 16L,
-                "Pinned baseline example counts differ from complete saved-detail evidence")
         println(s"PASS baseline $runId: ${actual.full.size} twins, ${actual.detail.size} detailed entries, ${actual.global.size} global pairs, ${actual.unresolved.size} unresolved; no investigation datasets written")
 
-/** Small Scala entry point for fixture checks and bounded historical regression. */
+/** Small Scala entry point for fixture checks and bounded dated-baseline regression. */
 object StepFiveChecks:
 
     /**
@@ -796,14 +782,15 @@ object StepFiveChecks:
      * Reuses the normal local Spark settings and launch-supplied heap. Reads saved outputs only when a baseline run is supplied and writes no
      * investigation tables. Spark closes after the checks.
      *
-     * @param args no arguments, or --baseline-run <historical-run-name>
+     * @param args no arguments, or --baseline-run YYYY-MM-DD
      */
     def main(args: Array[String]): Unit =
         val baseline = args.toList match
             case Nil => None
-            case "--baseline-run" :: runId :: Nil if runId.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,79}") => Some(runId)
-            case _ => throw new IllegalArgumentException("Usage: StepFiveChecks [--baseline-run <historical-run-name>]")
-        val scratch = Files.createTempDirectory("biomed3471-step-five-checks-")
+            case "--baseline-run" :: runId :: Nil if runId.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}") =>
+                Some(LocalDate.parse(runId).toString)
+            case _ => throw new IllegalArgumentException("Usage: StepFiveChecks [--baseline-run YYYY-MM-DD]")
+        val scratch = Files.createTempDirectory("biomed3471-codex-step-five-checks-")
         val config = RunConfig(DefaultInputPath, "step-five-checks", scratch)
         val spark = makeSparkSession(config)
         try

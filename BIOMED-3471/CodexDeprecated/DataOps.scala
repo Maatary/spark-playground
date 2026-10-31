@@ -1,6 +1,6 @@
-package biomed3471.codex
+package biomed3471.codexdeprecated
 
-import biomed3471.codex.DataTypes.{
+import biomed3471.codexdeprecated.DataTypes.{
     BackfillSource,
     CanonicalRelationGroups,
     ForwardFlowSource,

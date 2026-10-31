@@ -1,4 +1,6 @@
-# BIOMED-3471: phase one
+# BIOMED-3471: deprecated twin search
+
+This implementation is retained in package `biomed3471.codexdeprecated` as an independent reference for the [current implementation](../codex/README.md), in package `biomed3471.codex`. Its outputs use the separate `deprecated/` prefix.
 
 Phase One finds the non-identical twins of forward-only canonical relations in backfill, then identifies the homonymous node pairs to investigate. The backfill search includes both `backfillOnly` and `shared`.
 
@@ -14,7 +16,7 @@ Model references: [Identifier Schemes](https://elsevier.atlassian.net/wiki/space
 
 ## From twins to node pairs
 
-The [full four-case explanation of the original approach](step-5-original-approach.md) is preserved for comparison with the new approach.
+The [full four-case explanation of the original approach](step-5-original-approach.md) is preserved for comparison with the [current direct approach](../codex/step-5-direct-approach.md).
 
 To identify **homonymous node pairs**—nodes that share the same name but have different identifiers—we need to determine which node in the forward-flow relation should be compared with which node in the backfill relation. We call the result of this determination a **node pairing**.
 
@@ -154,10 +156,10 @@ canonicalRelations [write/read]
 
 ## Six saved Delta tables
 
-All tables are beneath:
+Each run uses a date in `YYYY-MM-DD` format. Each table has its own directory:
 
 ```text
-s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/<run>/
+s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/deprecated/YYYY-MM-DD/<table>/
 ```
 
 | Table | What one row contains | What the table tells us |
@@ -221,7 +223,7 @@ These four entries are the previously verified historical examples, shown in the
 | biodata:smallmol/Concept_700526633 | biodata:smallmol/Concept_86396600 | dorzolamide | regulator | biodata:directregulation/regulator/Concept_700526633/target/EC_4.2.1.1 | biodata:directregulation/regulator/Concept_86396600/target/PROTYP601 | false |
 | biodata:functionalclass/EC_4.2.1.1 | biodata:functionalclass/PROTYP601 | carbonic anhydrase | target | biodata:directregulation/regulator/Concept_700526633/target/EC_4.2.1.1 | biodata:directregulation/regulator/Concept_86396600/target/PROTYP601 | false |
 
-The two luteolin entries link one node pair to two twins. The dorzolamide and carbonic-anhydrase entries link two different node pairs to one twin. Aggregating just these four fixture entries produces counts 2, 1 and 1. Aggregating all saved detail gives:
+The two luteolin entries link one node pair to two twins. The dorzolamide and carbonic-anhydrase entries link two different node pairs to one twin. Aggregating just these four fixture entries produces counts 2, 1 and 1. Historical full-run aggregation recorded these counts:
 
 | forwardNodeUri | backfillNodeUri | matchedNodeName | nonIdenticalTwinPairCount |
 |---|---|---|---|
@@ -236,8 +238,8 @@ The two luteolin entries link one node pair to two twins. The dorzolamide and ca
 | `DataTypes.scala` | Behavior-free configuration/source groups, position metadata, inactive monitor state and constants |
 | `DataOps.scala` | Native Spark expressions for canonical identity, grouping, twin matching and complete node-pair results |
 | `IOOps.scala` | Argument parsing, local Spark/S3 configuration and sequential Delta persistence |
-| `PhaseOneApp.scala` | Pipeline orchestration and Spark shutdown |
-| `StepFiveChecks.scala` | Small fixtures and read-only regression against saved historical Step 5 outputs |
+| `TwinSearchApp.scala` | Pipeline orchestration and Spark shutdown |
+| `StepFiveChecks.scala` | Small fixtures and read-only regression against saved deprecated Step 5 outputs |
 | `RuntimeOps.scala` | Existing optional JVM checks/monitoring; not invoked by the application |
 
 Pure operations live in the operations modules; data declarations remain behavior-free. Transformations use built-in Spark expressions, without UDFs or distributed `Dataset.map`. No full input dataset is collected to the driver or cached in memory.
@@ -247,26 +249,30 @@ Pure operations live in the operations modules; data declarations remain behavio
 ```zsh
 cd /Users/maatari/Dev/IdeaProjects/spark-playground
 scala compile .
-scala run . -M biomed3471.codex.StepFiveChecks --java-opt=-Xmx4g -- \
-  --baseline-run 2026-10-21-phase-one-230855
+scala run . -M biomed3471.codexdeprecated.StepFiveChecks --java-opt=-Xmx4g
+
+# After creating a deprecated run for 2026-10-30:
+scala run . -M biomed3471.codexdeprecated.StepFiveChecks --java-opt=-Xmx4g -- \
+  --baseline-run 2026-10-30
 ```
 
-With no arguments, `StepFiveChecks` runs fixtures only. The command above runs 15 explicit twin fixtures followed by regression against the latest completed run in one Spark session. It reads the run’s small twin/detail/summary tables, compares complete results and detail multiplicity, and independently checks complete-twin counts. For `2026-10-21-phase-one-215353`, detail is read from its historical `homonymousNodePairsByTwin` and summary from its historical `homonymousNodePairs`. Other supplied runs use the final `homonymousNodePairs` and `homonymousNodePairsWithTwinCount` names. It does not read the original occurrence export or write investigation tables. Both recorded baselines contain 1,911 twins, 1,942 detailed entries, 157 global node pairs and zero unresolved twins. Fixtures check name matching across capitalization and leading/trailing spaces. Synthetic fixtures exercise unresolved and repeated-node cases, including a shared Binding node at the same position and a directed self-relation on both sides. The latter retains regulator and target detail entries while counting their complete twin once.
+With no arguments, `StepFiveChecks` runs 15 explicit twin-pair fixtures. `--baseline-run YYYY-MM-DD` additionally reads that date's saved tables beneath `deprecated/`, compares complete results and detail multiplicity, and independently checks distinct twin-pair counts. The baseline command above requires a completed deprecated run for its date; `2026-10-30` is an example date, not a claim that this output exists.
+
+Historical validation recorded 1,911 twin pairs, 1,942 detailed entries, 157 global node pairs and zero unresolved twin pairs. These counts are historical evidence and do not describe an existing run under the date-only deprecated layout. Fixtures check name matching across capitalization and leading/trailing spaces. Synthetic fixtures exercise unresolved and repeated-node cases, including a shared Binding node at the same position and a directed self-relation on both sides. The latter retains regulator and target detail entries while counting their twin pair once.
 
 The repository's existing `project.scala` supplies Scala, Spark, Delta, Hadoop/AWS and JVM module options.
 
 ## Full run
 
-From the same project root, generate a fresh run name and pass it as an application argument:
+From the same project root, supply a date with `--run`. For example:
 
 ```zsh
-task_run_id=$(date -u +%Y-%m-%d-phase-one-%H%M%S)
-scala run . -M biomed3471.codex.PhaseOneApp --java-opt=-Xmx4g -- \
-  --run "$task_run_id" \
-  --scratch "/private/tmp/biomed3471-codex/$task_run_id"
+scala run . -M biomed3471.codexdeprecated.TwinSearchApp --java-opt=-Xmx4g -- \
+  --run 2026-10-30 \
+  --scratch "/private/tmp/biomed3471-codexdeprecated/2026-10-30"
 ```
 
-`IOOps.parseArguments` reads `--run` from `main`'s argument array. The shell generates the timestamp; Scala does not read it from an environment variable or JVM system property. `outputPath` appends the supplied run name to the existing S3 prefix. Existing run prefixes, including partial runs, are refused; historical outputs are not overwritten or migrated.
+`IOOps.parseArguments` requires `--run` to contain a date in `YYYY-MM-DD` format. `outputPath` appends it beneath the `deprecated/` output prefix. Existing date prefixes, including partial runs, are refused; they are not overwritten and no timestamp suffix is added.
 
 Optional application arguments are `--input <delta-location>` and `--scratch <local-directory>`. The default input is:
 
@@ -276,14 +282,12 @@ s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/wytze-relation-occurr
 
 Both implementations read this same Delta source. It contains Wytze’s complete original export with its 16 columns unchanged; it is separate from the six analysis outputs. The original Parquet was copied within S3 and converted in place by adding the Delta transaction log. `--input` overrides the Delta location and is passed verbatim to Spark. No local source copy is required.
 
-Scratch defaults to `<java.io.tmpdir>/biomed3471-codex/<run>/`. It contains Spark spill and disk-backed S3 upload buffers. The program does not delete previous scratch data.
+Scratch defaults to `<java.io.tmpdir>/biomed3471-codexdeprecated/YYYY-MM-DD/`. It contains Spark spill and disk-backed S3 upload buffers. The program does not delete previous scratch data.
 
 The launch option sets a 4 GiB Java heap. Spark retains `local[*]`, 256 initial shuffle partitions, 32 MiB AQE advisory partitions, disabled broadcast joins and disk spill. S3 uploads use disk buffers with one active block per stream. No direct-memory cap or CPU cap is added. RuntimeOps remains inactive: no memory guard, RSS sampler or memory report is enabled.
 
 S3 access reuses the existing S3A configuration and `software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider`. Refresh an expired existing non-PROD session using `~/aws-login-nonprod`; no additional role or authentication route is introduced.
 
 Writes run sequentially with `errorifexists`. Committed intermediate readbacks bound lineage. `_STARTED` records the input and start time. The `_DATASETS_COMMITTED` call remains disabled; verify completion from exit status and all six Delta commits. The success message is printed only after the writes and Spark shutdown succeed.
-
-The final naming decision of 21 October 2026 gives detailed entries the name `homonymousNodePairs` and their derived summary the name `homonymousNodePairsWithTwinCount`. The retained run `2026-10-21-phase-one-215353` predates this decision: its `homonymousNodePairsByTwin` contains detail and its `homonymousNodePairs` contains the summary. Those saved directories retain their original meanings. Earlier seven-table outputs used `changedNodeComparisons` for detail; the separate distinct-per-twin intermediate is no longer part of the pipeline.
 
 This phase calculates the requested per-node-pair distinct twin count. Vocabulary classification, semantic review and category percentages remain separate investigation work.

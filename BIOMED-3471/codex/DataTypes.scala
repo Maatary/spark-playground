@@ -1,11 +1,11 @@
-package biomed3471.codexrefactored
+package biomed3471.codex
 
 import java.nio.file.Path
 
-/** Data and configuration for the BIOMED-3471 phase-one investigation. */
+/** Data and configuration for the BIOMED-3471 twin search. */
 object DataTypes:
 
-    /** Delta input location, unique output run, and local scratch directory. */
+    /** Delta input location, output date, and local scratch directory. */
     final case class RunConfig(inputPath: String, runId: String, scratchPath: Path)
 
     val ForwardFlowSource = "Elsevier ML NLP"

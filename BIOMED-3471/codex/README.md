@@ -1,12 +1,12 @@
-# BIOMED-3471: phase one with direct domain rules
+# BIOMED-3471: twin search with direct domain rules
 
 A **canonical relation** is one relation type between two specific nodes in their roles. A **relation occurrence** is one occurrence of that canonical relation in a document, produced by one pipeline. A node's **normalized name** is its name in lower case with spaces at both ends removed: `lower(trim(name))`.
 
-**Non-identical twins** are canonical relations with different canonical relation IDs, the same relation type and matching normalized node names: by regulator/target role for directed relations, or the same two partner names for undirected relations. Phase One compares each **forward-only canonical relation**, whose occurrences all come from the forward flow, with the backfill's canonical relations. Each match is a **twin pair**. The backfill twin may also have forward-flow relation occurrences.
+**Non-identical twins** are canonical relations with different canonical relation IDs, the same relation type and matching normalized node names: by regulator/target role for directed relations, or the same two partner names for undirected relations. The twin search compares each **forward-only canonical relation**, whose occurrences all come from the forward flow, with the backfill's canonical relations. Each match is a **twin pair**. The backfill twin may also have forward-flow relation occurrences.
 
 Step 5 determines which nodes go together within each twin pair. From resolved twin pairs, it selects pairs of different nodes with the same normalized name—the **homonymous node pairs**—to investigate.
 
-This implementation is in package `biomed3471.codexrefactored`. The existing [Codex implementation](../Codex/README.md) provides an independent reference for the Step 5 results.
+This is the current implementation, in package `biomed3471.codex`. The [deprecated implementation](../CodexDeprecated/README.md), in package `biomed3471.codexdeprecated`, provides an independent reference for the Step 5 results.
 
 ## Input and twin matching
 
@@ -103,7 +103,7 @@ In the last example, keep both pairs with identical contents: each relation uses
 
 Both alternatives contain homonymous node pairs: their normalized names agree and their node identities differ. No shared node or repeated node determines which name-matched node pair tuple to select, so the twin pair remains unresolved.
 
-The [standalone Step 5 explanation](step-5-refactored-appraoch.md) develops these same domain cases and their implementation.
+The [standalone Step 5 explanation](step-5-direct-approach.md) develops these same domain cases and their implementation.
 
 ## From domain rules to implementation
 
@@ -171,10 +171,10 @@ canonicalRelations [write/read]
 
 ## Six saved Delta tables
 
-All tables are beneath:
+Each run uses a date in `YYYY-MM-DD` format. Each table has its own directory:
 
 ```text
-s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/<run>/
+s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/YYYY-MM-DD/<table>/
 ```
 
 | Table | What one row contains | What the table tells us |
@@ -253,19 +253,19 @@ The two luteolin entries link one homonymous node pair to two twin pairs. The do
 | `DataTypes.scala` | Behavior-free run configuration, constants and dataset names |
 | `DataOps.scala` | Native Spark expressions for canonical identity, twin matching and domain node-pair correspondence |
 | `IOOps.scala` | Local Spark/S3 configuration and sequential Delta persistence |
-| `PhaseOneApp.scala` | Pipeline orchestration and Spark shutdown |
+| `TwinSearchApp.scala` | Pipeline orchestration and Spark shutdown |
 | `StepFiveChecks.scala` | Explicit fixtures, comparison with the original Spark implementation and saved-output regression |
-| `ExploreApp.scala` | Ad hoc inspection of occurrence schemas and historical twin counts |
+| `ExploreApp.scala` | Ad hoc inspection of occurrence schemas and current twin counts |
 
 Pure operations live in the operations modules; data declarations remain behavior-free. Transformations use built-in Spark expressions.
 
 ## Validation and check commands
 
-The local suite passed on 30 October 2026: 20 explicit twin-pair fixtures, equivalence with the original implementation, source selections, empty/unresolved subsets, schemas and distinct twin-pair counts. Its ordering checks distinguish this implementation's forward-position order from the original implementation's order by node URN.
+Historical validation on 30 October 2026 passed 20 explicit twin-pair fixtures, equivalence with the deprecated implementation, source selections, empty/unresolved subsets, schemas and distinct twin-pair counts. The ordering checks distinguish this implementation's forward-position order from the deprecated implementation's order by node URN.
 
-The full run `2026-10-30-phase-one-refactored-144734` completed with a 4 GiB heap. All six Delta commits were verified, and their row counts matched the previous run:
+The full run for `2026-10-31` completed with a 4 GiB heap and exit status 0. All six Delta tables committed beneath `s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/2026-10-31/` with these verified row counts:
 
-| Table | Rows in the committed Delta table |
+| Table | Committed row count |
 |---|---:|
 | `canonicalRelations` | 15,060,586 |
 | `nonIdenticalTwinPairs` | 1,911 |
@@ -274,37 +274,37 @@ The full run `2026-10-30-phase-one-refactored-144734` completed with a 4 GiB hea
 | `homonymousNodePairsWithTwinCount` | 157 |
 | `twinPairsWithMultipleNameMatchedNodePairTuples` | 0 |
 
-These full-run counts were verified from Delta metadata. Saved-output regression has not been run against this output.
+These counts were verified from the initial Delta commits and match the previous full run. The saved schemas also match, with the twin structs renamed to `forwardTwin` and `backfillTwin`. No fixture suite or saved-output regression was run during this rename and rerun.
 
 ```zsh
 cd /Users/maatari/Dev/IdeaProjects/spark-playground
 scala compile .
-scala run . -M biomed3471.codexrefactored.StepFiveChecks --java-opt=-Xmx4g
+scala run . -M biomed3471.codex.StepFiveChecks --java-opt=-Xmx4g
 
-# Also compare against a saved run:
-scala run . -M biomed3471.codexrefactored.StepFiveChecks --java-opt=-Xmx4g -- \
-  --baseline-run 2026-10-30-phase-one-refactored-144734
+# Optional read-only regression against the completed run:
+scala run . -M biomed3471.codex.StepFiveChecks --java-opt=-Xmx4g -- \
+  --baseline-run 2026-10-31
 ```
 
-With no arguments, `StepFiveChecks` runs the local fixtures. `--baseline-run` also runs read-only regression against that saved run in the same Spark session. The suite compares explicit expected results with this direct implementation and the actual original `biomed3471.codex.DataOps` implementation on the same twin-pair inputs.
+With no arguments, `StepFiveChecks` runs the local fixtures. `--baseline-run YYYY-MM-DD` also runs read-only regression against the current implementation's saved output for that date in the same Spark session. The suite compares explicit expected results with this direct implementation and `biomed3471.codexdeprecated.DataOps`, imported as `ExhaustiveDataOps`, on the same twin-pair inputs.
 
 The suite covers complete tuple contents, including repeated records, retained canonical relations and flags, roles, exact field/type/column order, selected detailed entries, unresolved alternatives and distinct twin-pair counts. Fixtures cover all four undirected cases, directed roles, self-reference on either or both sides, every shared-node position, name matching across capitalization and leading/trailing spaces and node-URN identity across node types.
 
-Saved-output regression reads the twin-pair and Step 5 tables and compares tuple contents, metadata, detail multiplicities and counts. Older saved runs use `forward` and `backfill`; the reader renames these to `forwardTwin` and `backfillTwin` for comparison. The fixtures cover unresolved twin pairs, including their two alternatives and exclusion from selected detail.
+Saved-output regression reads the twin-pair and Step 5 tables and compares tuple contents, metadata, detail multiplicities and counts. The fixtures cover unresolved twin pairs, including their two alternatives and exclusion from selected detail.
 
 The repository's existing `project.scala` supplies Scala, Spark, Delta, Hadoop/AWS and JVM module options.
 
 ## Full run
 
-From the same project root, generate a fresh run name and pass it as the single positional application argument:
+From the same project root, pass the run date as the single positional application argument. The completed `2026-10-31` run used:
 
 ```zsh
-task_run_id=$(date -u +%Y-%m-%d-phase-one-refactored-%H%M%S)
-scala run . -M biomed3471.codexrefactored.PhaseOneApp --java-opt=-Xmx4g -- \
-  "$task_run_id"
+AWS_PROFILE=aws-h-entellect-nonprod \
+  scala run . -M biomed3471.codex.TwinSearchApp --java-opt=-Xmx4g -- \
+  2026-10-31
 ```
 
-`PhaseOneApp` uses its single positional argument as the run name. `outputPath` appends it to the fixed S3 prefix. Existing run prefixes, including partial runs, are refused.
+`TwinSearchApp` requires a date in `YYYY-MM-DD` format. `outputPath` appends it to the current output prefix. Existing date prefixes, including partial runs, are refused; they are not overwritten and no timestamp suffix is added.
 
 The fixed input is:
 
@@ -314,7 +314,7 @@ s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/wytze-relation-occurr
 
 This Delta source contains Wytze’s complete original export with its 16 columns unchanged and is separate from the six analysis outputs.
 
-Scratch is created automatically at `<java.io.tmpdir>/biomed3471-codexrefactored/<run>/`. It contains Spark spill and disk-backed S3 upload buffers. The program does not delete previous scratch data.
+Scratch is created automatically at `<java.io.tmpdir>/biomed3471-codex/YYYY-MM-DD/`. It contains Spark spill and disk-backed S3 upload buffers. The program does not delete previous scratch data.
 
 The launch option sets a 4 GiB Java heap. Spark uses `local[*]`, 256 initial shuffle partitions, 32 MiB AQE advisory partitions, disabled broadcast joins and disk spill. S3 uploads use disk buffers with one active block per stream.
 

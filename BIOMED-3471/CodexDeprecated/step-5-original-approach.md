@@ -1,6 +1,6 @@
 # Step 5 — original approach
 
-Preserved on 23 October 2026 for comparison with the new approach. The writeup below is retained exactly as supplied.
+Preserved on 23 October 2026 for comparison with the [current direct approach](../codex/step-5-direct-approach.md). The writeup below is retained exactly as supplied.
 
 ---
 
