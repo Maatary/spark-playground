@@ -1,8 +1,8 @@
 package biomed3471.codex
 
 import biomed3471.codex.DataOps.*
-import biomed3471.codex.DataTypes.{BackfillSource, DatasetNames, ForwardFlowSource, OutputPrefix}
-import biomed3471.codex.IOOps.makeSparkSession
+import biomed3471.codex.DataTypes.{BackfillSource, ForwardFlowSource}
+import biomed3471.codex.TwinSearchApp.makeSparkSession
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.types.*
 
@@ -622,9 +622,6 @@ private object StepFiveCheckOps:
      * @param spark the single session shared with an optional baseline check
      */
     def runFixtures(spark: SparkSession): Unit =
-        require(DatasetNames == List("canonicalRelations", "nonIdenticalTwinPairs",
-            "twinPairsWithNameMatchedNodePairTuples", "homonymousNodePairsPerTwinPair",
-            "twinPairCountPerHomonymousNodePair", "twinPairsWithMultipleNameMatchedNodePairTuples"), "DatasetNames does not contain the six agreed outputs in order")
         val real = checkFixtures(spark, realFixtures, "real examples")
         require(real.detail.size == 4, "The three real twins must yield four detailed entries")
         require(real.global.map(row => row.getString(2) -> row.getLong(3)).toMap ==
@@ -646,13 +643,12 @@ private object StepFiveCheckOps:
      * Reads one bounded result table from the selected dated baseline.
      *
      * @param spark existing session using the established credential provider
-     * @param runId baseline date selected by the caller in YYYY-MM-DD format
-     * @param table Step 5 table name, explicitly selected in code
+     * @param tablePath explicit Delta path for one saved Step 5 table
      * @return a local DataFrame containing at most MaximumCheckedRows saved rows
      */
-    private def readBaseline(spark: SparkSession, runId: String, table: String): DataFrame =
-        val data = spark.read.format("delta").load(s"$OutputPrefix$runId/$table/")
-        frame(spark, smallRows(data, s"baseline $table"), data.schema)
+    private def readBaseline(spark: SparkSession, tablePath: String): DataFrame =
+        val data = spark.read.format("delta").load(tablePath)
+        frame(spark, smallRows(data, s"baseline $tablePath"), data.schema)
 
     /**
      * Checks that Step 5 results match the selected dated baseline's saved outputs.
@@ -662,14 +658,15 @@ private object StepFiveCheckOps:
      * twin pairs from saved detail. The occurrence export and writers are never used.
      *
      * @param spark the same session already used for fixtures
-     * @param runId baseline date in YYYY-MM-DD format under OutputPrefix
+     * @param runId baseline date in YYYY-MM-DD format under the personal DEV investigation path
      */
     def runBaseline(spark: SparkSession, runId: String): Unit =
-        val twins = readBaseline(spark, runId, "nonIdenticalTwinPairs")
-        val savedFull = readBaseline(spark, runId, "twinPairsWithNameMatchedNodePairTuples")
-        val savedDetail = readBaseline(spark, runId, "homonymousNodePairsPerTwinPair")
-        val savedSummary = readBaseline(spark, runId, "twinPairCountPerHomonymousNodePair")
-        val savedUnresolved = readBaseline(spark, runId, "twinPairsWithMultipleNameMatchedNodePairTuples")
+        val runPath = s"s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/$runId"
+        val twins = readBaseline(spark, s"$runPath/nonIdenticalTwinPairs")
+        val savedFull = readBaseline(spark, s"$runPath/twinPairsWithNameMatchedNodePairTuples")
+        val savedDetail = readBaseline(spark, s"$runPath/homonymousNodePairsPerTwinPair")
+        val savedSummary = readBaseline(spark, s"$runPath/twinPairCountPerHomonymousNodePair")
+        val savedUnresolved = readBaseline(spark, s"$runPath/twinPairsWithMultipleNameMatchedNodePairTuples")
         checkSchema("saved full results", savedFull, FullSchema)
         checkSchema("saved detail", savedDetail, DetailSchema)
         checkSchema("saved summary", savedSummary, GlobalSchema)

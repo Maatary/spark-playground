@@ -165,8 +165,8 @@ canonicalRelations [write/read]
   -> nonIdenticalTwinPairs [write/read]
       -> twinPairsWithNameMatchedNodePairTuples [write/read]
           -> homonymousNodePairsPerTwinPair [write/read]
-              -> twinPairCountPerHomonymousNodePair [write]
-          -> twinPairsWithMultipleNameMatchedNodePairTuples [write]
+              -> twinPairCountPerHomonymousNodePair [write/read]
+          -> twinPairsWithMultipleNameMatchedNodePairTuples [write/read]
 ```
 
 ## Six saved Delta tables
@@ -250,10 +250,9 @@ The two luteolin entries link one homonymous node pair to two twin pairs. The do
 
 | File | Responsibility |
 |---|---|
-| `DataTypes.scala` | Behavior-free run configuration, constants and dataset names |
+| `DataTypes.scala` | Pipeline source names |
 | `DataOps.scala` | Native Spark expressions for canonical identity, twin matching and domain node-pair correspondence |
-| `IOOps.scala` | Local Spark/S3 configuration and sequential Delta persistence |
-| `TwinSearchApp.scala` | Pipeline orchestration and Spark shutdown |
+| `TwinSearchApp.scala` | Input and output paths, Spark session, run reservation, Delta write/read helper, pipeline orchestration and Spark shutdown |
 | `StepFiveChecks.scala` | Explicit fixtures and read-only regression against saved outputs |
 | `ExploreApp.scala` | Ad hoc inspection of occurrence schemas and current twin counts |
 
@@ -274,7 +273,7 @@ The `2026-10-31` rerun completed with a 4 GiB heap and exit status 0 at 18:34 UT
 | `twinPairCountPerHomonymousNodePair` | 157 |
 | `twinPairsWithMultipleNameMatchedNodePairTuples` | 0 |
 
-Verification of the new Delta commits confirmed these row counts and schemas matching the prior run. Every referenced data file was present with its recorded size. The old detail and summary output prefixes were absent, and the input Delta log was unchanged. No fixture suite or saved-output regression was run for this rerun.
+Verification of the new Delta commits confirmed these row counts and schemas matching the prior run. Every referenced data file was present with its recorded size. The old detail and summary output prefixes were absent, and the input Delta log was unchanged. No fixture suite or saved-output regression was run for this rerun. This evidence predates the persistence refactor below; that refactored flow has not been run.
 
 ```zsh
 cd /Users/maatari/Dev/IdeaProjects/spark-playground
@@ -304,7 +303,9 @@ AWS_PROFILE=aws-h-entellect-nonprod \
   2026-10-31
 ```
 
-`TwinSearchApp` requires a date in `YYYY-MM-DD` format. `outputPath` appends it to the current output prefix. Existing date prefixes, including partial runs, are refused; they are not overwritten and no timestamp suffix is added.
+`TwinSearchApp` reads the run date from `args(0)` and validates it with `LocalDate.parse`. It declares `relationOccurrencePath`, `runPath` and the six output table paths directly before creating Spark. Each output table path is beneath `s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/YYYY-MM-DD/`.
+
+`TwinSearchApp` also contains `makeSparkSession`, `writeAndReadBackDeltaTable` and `beginRun`. Before the pipeline starts, `beginRun(spark, runPath, relationOccurrencePath)` rejects an existing run prefix and writes an `_STARTED` marker with the input path and start time. Rerunning an existing date requires explicit cleanup of that dated output prefix first.
 
 The fixed input is:
 
@@ -318,5 +319,7 @@ The launch option sets a 4 GiB Java heap. The parameterless `makeSparkSession` u
 
 S3 access reuses the existing S3A configuration and `software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider`. Refresh an expired non-PROD session using `~/aws-login-nonprod`.
 
-Writes run sequentially with `errorifexists`. Reading the saved intermediate tables lets later steps use those results without repeating the earlier processing. `_STARTED` records the input and start time. Verify completion from exit status and all six Delta commits. The success message is printed only after the writes and Spark shutdown succeed.
+All six outputs use `writeAndReadBackDeltaTable(data, tablePath)`. It writes Delta with `SaveMode.Overwrite` and `overwriteSchema=true`, then returns `spark.read.delta(tablePath)`. The initial `beginRun` guard requires a fresh dated prefix before these writes begin.
+
+Writes run sequentially. Reading the saved intermediate tables lets later steps use those results without repeating the earlier processing. Verify completion from exit status and all six Delta commits. The success message is printed only after the writes and Spark shutdown succeed.
 

@@ -1,6 +1,6 @@
 package biomed3471.codex
 
-import biomed3471.codex.IOOps.makeSparkSession
+import biomed3471.codex.TwinSearchApp.makeSparkSession
 import io.github.pashashiz.spark_encoders.TypedEncoder.given
 import scribe.{Level, Logger}
 import sparkops.SchemaEnforcementOps.*
