@@ -314,7 +314,7 @@ s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/wytze-relation-occurr
 
 This Delta source contains Wytze’s complete original export with its 16 columns unchanged and is separate from the six analysis outputs.
 
-The launch option sets a 4 GiB Java heap. The parameterless `makeSparkSession` uses a fixed Codex application name, Delta integration, the RocksDB state-store provider, `local[*]`, eight shuffle partitions and a 32 MiB file-scan partition limit. The file-scan limit is retained to reduce per-task aggregation memory after an earlier 4 GiB attempt ran out of heap during canonical-relation aggregation.
+The launch option sets a 4 GiB Java heap. The parameterless `makeSparkSession` uses a fixed Codex application name, Delta integration, `local[*]` and eight shuffle partitions. Apart from the Delta and S3 integration settings, all other Spark and Hadoop settings use their defaults.
 
 S3 access reuses the existing S3A configuration and `software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider`. Refresh an expired non-PROD session using `~/aws-login-nonprod`.
 
