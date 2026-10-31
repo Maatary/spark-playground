@@ -32,25 +32,23 @@ object ExploreApp:
     def main(args: Array[String]): Unit =
         val spark = makeSparkSession
 
-        val relationOccurrencePath = "s3a://canary-data-science/wytze/BCE_validation_September_2026_II/relationships_08-10-2026.parquet"
+        val relationOccurrencePath = "s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/wytze-relation-occurrences/"
 
         spark.read.parquet(relationOccurrencePath)
             .tap { _.printSchema() }
 
-//        val nonIdenticalTwinPairs = spark
-//            .read
-//            .format("delta")
-//            .load("s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/2026-10-21-phase-one-230855/nonIdenticalTwinPairs/")
-//            .withColumnRenamed("forward", "forwardTwin") // This saved run predates the twin-column rename.
-//            .withColumnRenamed("backfill", "backfillTwin")
-//            //.tap {_.printSchema()}
-//            //.tap{ _.show(10, truncate = false) }
-//
-//
-//        nonIdenticalTwinPairs
-//            .count()
-//            .tap { count => println(s"Non-identical twin pairs count: $count") }
-//
+        val nonIdenticalTwinPairs = spark
+            .read
+            .format("delta")
+            .load("s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/2026-10-30-phase-one-refactored-144734/nonIdenticalTwinPairs/")
+            .tap {_.printSchema()}
+            .tap{ _.show(10, truncate = false) }
+
+
+        nonIdenticalTwinPairs
+            .count()
+            .tap { count => println(s"Non-identical twin pairs count: $count") }
+
 //
 //
 //        val forwardRelationsWithTwins = nonIdenticalTwinPairs
