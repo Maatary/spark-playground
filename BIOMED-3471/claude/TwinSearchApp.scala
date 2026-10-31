@@ -42,19 +42,21 @@ import scala.util.chaining.scalaUtilChainingOps
  *     different node URNs. A twin pair is resolved when the rules decide which forward-flow node goes with which backfill node, and unresolved when
  *     they cannot.
  *
- * The input is a list of relation occurrences. TwinSearchApp reads them, runs the five steps of [[DataOps]], and writes six Delta tables:
+ * TwinSearchApp reads the relation occurrences from the input and runs the five steps of [[DataOps]] in order. Steps 1 and 2 turn the relation
+ * occurrences into canonical relations, steps 3 and 4 find the twin pairs, and step 5 finds the homonymous node pairs in each twin pair. The results
+ * of steps 2, 4 and 5 are saved in six Delta tables:
  *
- * {{{
- * relation occurrences, from the input
- *   step 1   the canonical relation ID of each relation occurrence
- *   step 2   one row for each canonical relation                     canonicalRelations
- *   step 3   the normalized names, and the name key
- *   step 4   the twin pairs, matched on the name key                 nonIdenticalTwinPairs
- *   step 5   every twin pair with the result of rules A to C         twinPairsWithNameMatchedNodePairTuples
- *            the homonymous node pairs of each resolved twin pair    homonymousNodePairs
- *            the number of twin pairs of each homonymous node pair   twinPairCountPerHomonymousNodePair
- *            the unresolved twin pairs                               twinPairsWithMultipleNameMatchedNodePairTuples
- * }}}
+ *   - Step 1 builds the canonical relation ID of each relation occurrence.
+ *   - Step 2 combines the relation occurrences of each canonical relation into one row. These rows are saved in `canonicalRelations`.
+ *   - Step 3 adds a name key to each canonical relation.
+ *   - Step 4 matches each forward-only canonical relation with every canonical relation that has a backfill relation occurrence and the same name
+ *     key. Each match is a twin pair, and the twin pairs are saved in `nonIdenticalTwinPairs`.
+ *   - Step 5 decides, in each twin pair, which forward-flow node goes with which backfill node. Its results are saved in four tables:
+ *     - `twinPairsWithNameMatchedNodePairTuples` holds every twin pair with the result of rules A to C. The result is one answer for a resolved twin
+ *       pair, and the two possible answers for an unresolved one.
+ *     - `homonymousNodePairs` holds the homonymous node pairs of each resolved twin pair.
+ *     - `twinPairCountPerHomonymousNodePair` holds each homonymous node pair once, with the number of twin pairs that give it.
+ *     - `twinPairsWithMultipleNameMatchedNodePairTuples` holds the unresolved twin pairs.
  *
  * Each table is read back after it is written, so that the next step starts from the saved table instead of computing the earlier steps again from
  * the input. At the end, TwinSearchApp prints five numbers: the twin pairs, the forward-only canonical relations with at least one non-identical
@@ -149,13 +151,13 @@ object TwinSearchApp:
             .pipe { computeTwinPairsWithMultipleNameMatchedNodePairTuples }
             .pipe { df => writeAndReadBackDeltaTable(df, twinPairsWithMultipleNameMatchedNodePairTuplesPath) }
 
-        val forwardOnlyCanonicalRelationWithTwinCount = nonIdenticalTwinPairsDF
+        val forwardOnlyCanonicalRelationTwinCount = nonIdenticalTwinPairsDF
             .select($"forwardCanonicalId")
             .distinct()
             .count()
 
         println(s"twinPairCount=${nonIdenticalTwinPairsDF.count()}")
-        println(s"forwardOnlyCanonicalRelationWithTwinCount=$forwardOnlyCanonicalRelationWithTwinCount")
+        println(s"forwardOnlyCanonicalRelationTwinCount=$forwardOnlyCanonicalRelationTwinCount")
         println(s"unresolvedTwinPairCount=${twinPairsWithMultipleNameMatchedNodePairTuplesDF.count()}")
         println(s"homonymousNodePairEntryCount=${homonymousNodePairsDF.count()}")
         println(s"homonymousNodePairCount=${twinPairCountPerHomonymousNodePairDF.count()}")
