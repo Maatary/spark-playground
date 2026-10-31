@@ -137,7 +137,8 @@ object DataOps:
          *
          * Combines relation type and normalized node names. The relation type decides whether the relation is directed or undirected. Directed names
          * retain regulator/target order. Undirected names are sorted because their positions can differ between canonical relations with different
-         * node TERMite IDs. Only the name key sorts names: the original node URNs, their associated names and every other input field remain unchanged.
+         * node TERMite IDs. Only the name key sorts names: the original node URNs, their associated names and every other input field remain
+         * unchanged.
          *
          * The receiver contains canonical relations retaining their node fields.
          * @return
@@ -158,13 +159,14 @@ object DataOps:
      * not remove it from backfill. A forward-only relation has no backfill occurrence, so the joined relations have different canonical relation IDs.
      * One entry per canonical relation on each side means each twin pair appears once, without another step to remove duplicates or look up sources.
      *
-     * Sets nonIdenticalTwinsAlsoWithinForwardFlow to true when the backfill twin also has forward-flow occurrences. Both canonical relations in
-     * that twin pair then occur in the forward flow.
+     * Sets nonIdenticalTwinsAlsoWithinForwardFlow to true when the backfill twin also has forward-flow occurrences. Both canonical relations in that
+     * twin pair then occur in the forward flow.
      *
      * @param canonicalRelations
      *   one entry per canonicalId with its source set
      * @return
-     *   one entry per twin pair, with both canonical relation IDs, nonIdenticalTwinsAlsoWithinForwardFlow and both canonical relation structs
+     *   one entry per twin pair, with both canonical relation IDs, nonIdenticalTwinsAlsoWithinForwardFlow and the forwardTwin and backfillTwin
+     *   structs
      */
     def findNonIdenticalTwinPairs(canonicalRelations: DataFrame): DataFrame =
         val canonicalRelationsWithKey = canonicalRelations.withComparisonKey
@@ -181,8 +183,8 @@ object DataOps:
               col("backfill.canonicalId").as("backfillCanonicalId"),
               array_contains(col("backfill.sources"), ForwardFlowSource)
                   .as("nonIdenticalTwinsAlsoWithinForwardFlow"),
-              struct(col("forward.*")).as("forward"),
-              struct(col("backfill.*")).as("backfill")
+              struct(col("forward.*")).as("forwardTwin"),
+              struct(col("backfill.*")).as("backfillTwin")
             )
 
     /**
@@ -218,8 +220,8 @@ object DataOps:
     /**
      * Selects the name-matched node pair tuples for one established twin pair.
      *
-     * Defines two tuple expressions once: straight pairs forward nodes 1 and 2 with backfill nodes 1 and 2; crossed pairs them with backfill nodes
-     * 2 and 1. Both tuples list the pair for forward node 1 first and preserve repeated records.
+     * Defines two tuple expressions once: straight pairs forward nodes 1 and 2 with backfill nodes 1 and 2; crossed pairs them with backfill nodes 2
+     * and 1. Both tuples list the pair for forward node 1 first and preserve repeated records.
      *
      * Directed twins take the straight tuple, matching regulator with regulator and target with target. Undirected twins first take the straight
      * tuple when either relation is self-referencing. Otherwise, the rules choose by different names, then shared node identity, and retain both
@@ -227,23 +229,23 @@ object DataOps:
      *
      * Step 4 guarantees matching normalized names for every node pair retained by these rules, so matchedNodeName comes from the forward node.
      *
-     * @param forward
+     * @param forwardTwin
      *   the forward-flow canonical relation struct
-     * @param backfill
+     * @param backfillTwin
      *   its backfill twin's canonical relation struct
      * @return
      *   one tuple when resolved, or two alternatives in straight-then-crossed order when unresolved
      */
-    private def nameMatchedNodePairTuples(forward: Column, backfill: Column): Column =
-        val forwardNode1Urn             = forward.getField("node1_urn")
-        val forwardNode2Urn             = forward.getField("node2_urn")
-        val backfillNode1Urn            = backfill.getField("node1_urn")
-        val backfillNode2Urn            = backfill.getField("node2_urn")
-        val forwardNode1NormalizedName  = forward.getField("node1_name").normalizedNodeName
-        val forwardNode2NormalizedName  = forward.getField("node2_name").normalizedNodeName
-        val backfillNode1NormalizedName = backfill.getField("node1_name").normalizedNodeName
+    private def nameMatchedNodePairTuples(forwardTwin: Column, backfillTwin: Column): Column =
+        val forwardNode1Urn             = forwardTwin.getField("node1_urn")
+        val forwardNode2Urn             = forwardTwin.getField("node2_urn")
+        val backfillNode1Urn            = backfillTwin.getField("node1_urn")
+        val backfillNode2Urn            = backfillTwin.getField("node2_urn")
+        val forwardNode1NormalizedName  = forwardTwin.getField("node1_name").normalizedNodeName
+        val forwardNode2NormalizedName  = forwardTwin.getField("node2_name").normalizedNodeName
+        val backfillNode1NormalizedName = backfillTwin.getField("node1_name").normalizedNodeName
 
-        val undirected                     = forward.getField("direction") === "undirected"
+        val undirected                      = forwardTwin.getField("direction") === "undirected"
         val hasSelfReferencingRelation      = forwardNode1Urn === forwardNode2Urn || backfillNode1Urn === backfillNode2Urn
         val forwardNodesHaveDifferentNames  = forwardNode1NormalizedName =!= forwardNode2NormalizedName
         val namesInSameOrderInBothRelations = forwardNode1NormalizedName === backfillNode1NormalizedName
@@ -282,10 +284,9 @@ object DataOps:
          * first, followed by the pair for forward-flow node 2. All existing columns, including both canonical relation structs and the flag, remain
          * unchanged.
          *
-         * Selects tuples by directed roles or undirected normalized names and node identity, with the early
-         * self-reference shortcut. See
-         * <a href="README.md#direct-domain-rules">the domain rules</a> and
-         * <a href="README.md#from-domain-rules-to-implementation">their implementation</a>.
+         * Selects tuples by directed roles or undirected normalized names and node identity, with the early self-reference shortcut. See <a
+         * href="README.md#direct-domain-rules">the domain rules</a> and <a href="README.md#from-domain-rules-to-implementation">their
+         * implementation</a>.
          *
          * The receiver contains one row per established non-identical twin pair.
          *
@@ -295,7 +296,7 @@ object DataOps:
         def withNameMatchedNodePairTuples: DataFrame =
             nonIdenticalTwinPairs.withColumn(
               "nameMatchedNodePairTuples",
-              nameMatchedNodePairTuples(col("forward"), col("backfill"))
+              nameMatchedNodePairTuples(col("forwardTwin"), col("backfillTwin"))
             )
 
     extension (twinPairsWithNameMatchedNodePairTuples: DataFrame)
@@ -340,9 +341,9 @@ object DataOps:
         /**
          * Retains unresolved twin pairs and both name-matched node pair tuples.
          *
-         * Selects twin pairs with two name-matched node pair tuples and keeps both canonical relation IDs alongside those tuples. Every tuple retains two
-         * entries. Canonical relation structs, source sets and the independent flag remain in twinPairsWithNameMatchedNodePairTuples rather than this
-         * output.
+         * Selects twin pairs with two name-matched node pair tuples and keeps both canonical relation IDs alongside those tuples. Every tuple retains
+         * two entries. Canonical relation structs, source sets and the independent flag remain in twinPairsWithNameMatchedNodePairTuples rather than
+         * this output.
          *
          * The receiver twinPairsWithNameMatchedNodePairTuples contains twin pairs with both canonical relations and one or two name-matched node pair
          * tuples.

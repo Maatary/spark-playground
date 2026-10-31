@@ -41,6 +41,8 @@ object ExploreApp:
 //            .read
 //            .format("delta")
 //            .load("s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/2026-10-21-phase-one-230855/nonIdenticalTwinPairs/")
+//            .withColumnRenamed("forward", "forwardTwin") // This saved run predates the twin-column rename.
+//            .withColumnRenamed("backfill", "backfillTwin")
 //            //.tap {_.printSchema()}
 //            //.tap{ _.show(10, truncate = false) }
 //
@@ -52,7 +54,7 @@ object ExploreApp:
 //
 //
 //        val forwardRelationsWithTwins = nonIdenticalTwinPairs
-//                .select("forward.*")
+//                .select("forwardTwin.*")
 //                .distinct()
 //
 //        forwardRelationsWithTwins
@@ -61,7 +63,7 @@ object ExploreApp:
 //
 //
 //        val backfillRelationsWithTwins = nonIdenticalTwinPairs
-//                .select("backfill.*")
+//                .select("backfillTwin.*")
 //                .distinct()
 //
 //        backfillRelationsWithTwins

@@ -18,8 +18,8 @@ private object StepFiveCheckData:
 
     final case class Fixture(
         label: String,
-        forward: Row,
-        backfill: Row,
+        forwardTwin: Row,
+        backfillTwin: Row,
         shared: Boolean,
         expectedResults: Vector[Vector[Row]]
     )
@@ -62,8 +62,8 @@ private object StepFiveCheckData:
         StructField("forwardCanonicalId", StringType),
         StructField("backfillCanonicalId", StringType),
         StructField("nonIdenticalTwinsAlsoWithinForwardFlow", BooleanType),
-        StructField("forward", NestedRelationSchema),
-        StructField("backfill", NestedRelationSchema)
+        StructField("forwardTwin", NestedRelationSchema),
+        StructField("backfillTwin", NestedRelationSchema)
     ))
 
     val NodePairSchema = StructType(Vector(
@@ -450,11 +450,18 @@ private object StepFiveCheckOps:
      */
     private def evaluateExhaustive(input: DataFrame, label: String): CheckedOutputs =
         checkSchema(s"$label exhaustive input", input, TwinSchema)
-        val full = ExhaustiveDataOps.withNameMatchedNodePairTuples(input)
+        // The original implementation still uses forward/backfill for its twin columns.
+        val exhaustiveInput = input
+            .withColumnRenamed("forwardTwin", "forward")
+            .withColumnRenamed("backfillTwin", "backfill")
+        val full = ExhaustiveDataOps.withNameMatchedNodePairTuples(exhaustiveInput)
         val detail = ExhaustiveDataOps.selectHomonymousNodePairs(full)
         val global = ExhaustiveDataOps.aggregateHomonymousNodePairsWithTwinCount(detail)
         val unresolved = ExhaustiveDataOps.selectTwinPairsWithMultipleNameMatchedNodePairTuples(full)
-        checkedOutputs(full, detail, global, unresolved, s"$label exhaustive", forwardPositionOrder = false)
+        val renamedFull = full
+            .withColumnRenamed("forward", "forwardTwin")
+            .withColumnRenamed("backfill", "backfillTwin")
+        checkedOutputs(renamedFull, detail, global, unresolved, s"$label exhaustive", forwardPositionOrder = false)
 
     /**
      * Checks schemas, collects bounded outputs and verifies their stored ordering.
@@ -490,8 +497,8 @@ private object StepFiveCheckOps:
             completeResults.foreach { tuple =>
                 require(tuple.size == 2, s"$label: a complete result lost a participant")
                 if forwardPositionOrder then
-                    val forward = row.getAs[Row]("forward")
-                    val expectedUris = Vector(forward.getAs[String]("node1_urn"), forward.getAs[String]("node2_urn"))
+                    val forwardTwin = row.getAs[Row]("forwardTwin")
+                    val expectedUris = Vector(forwardTwin.getAs[String]("node1_urn"), forwardTwin.getAs[String]("node2_urn"))
                     require(tuple.map(_.getAs[String]("forwardNodeUri")) == expectedUris,
                         s"$label: complete-result ordering does not follow forward positions")
                 else
@@ -560,8 +567,8 @@ private object StepFiveCheckOps:
      * @return verified small outputs for additional focused assertions
      */
     private def checkFixtures(spark: SparkSession, fixtures: Vector[Fixture], label: String): CheckedOutputs =
-        val inputRows = fixtures.map(value => Row(value.forward.getString(0), value.backfill.getString(0), value.shared, value.forward, value.backfill))
-        val expectedById = fixtures.map(value => (value.forward.getString(0), value.backfill.getString(0)) -> value).toMap
+        val inputRows = fixtures.map(value => Row(value.forwardTwin.getString(0), value.backfillTwin.getString(0), value.shared, value.forwardTwin, value.backfillTwin))
+        val expectedById = fixtures.map(value => (value.forwardTwin.getString(0), value.backfillTwin.getString(0)) -> value).toMap
         require(expectedById.size == fixtures.size, s"$label fixtures accidentally repeat a complete twin ID")
         val input = frame(spark, inputRows, TwinSchema)
         val output = evaluate(input, label)
@@ -572,14 +579,14 @@ private object StepFiveCheckOps:
             val expected = expectedById(twinId(row))
             val actualResults = results(row)
             require(resultMultiset(actualResults) == resultMultiset(expected.expectedResults), s"${expected.label}: wrong complete results: $actualResults")
-            require(row.getAs[Row]("forward") == expected.forward && row.getAs[Row]("backfill") == expected.backfill,
+            require(row.getAs[Row]("forwardTwin") == expected.forwardTwin && row.getAs[Row]("backfillTwin") == expected.backfillTwin,
                 s"${expected.label}: participant fields, graph names, source sets or comparison key changed")
             require(row.getAs[Boolean]("nonIdenticalTwinsAlsoWithinForwardFlow") == expected.shared, s"${expected.label}: flag changed")
         }
         val expectedDetail = fixtures.filter(_.expectedResults.size == 1).flatMap { value =>
             value.expectedResults.head.filter(pair => pair.getString(1) != pair.getString(2)).map { pair =>
                 Row(pair.getString(1), pair.getString(2), pair.getString(3), pair.getString(0),
-                    value.forward.getString(0), value.backfill.getString(0), value.shared)
+                    value.forwardTwin.getString(0), value.backfillTwin.getString(0), value.shared)
             }
         }
         require(multiset(output.detail) == multiset(expectedDetail), s"$label: detailed entries, roles or repetitions differ")
@@ -642,10 +649,10 @@ private object StepFiveCheckOps:
         twins.foreach { row =>
             val shouldBeShared = row.getAs[String]("backfillCanonicalId").contains("Fixture_Sources_Shared")
             require(row.getAs[Boolean]("nonIdenticalTwinsAlsoWithinForwardFlow") == shouldBeShared, "Incorrect within-forward-flow flag")
-            require(row.getAs[Row]("forward").getAs[String]("node1_name") == "Luteolin", "Comparison-key construction changed graph names")
+            require(row.getAs[Row]("forwardTwin").getAs[String]("node1_name") == "Luteolin", "Comparison-key construction changed graph names")
         }
         val binding = syntheticFixtures.find(_.label.contains("crossed, two")).get
-        val bindingRows = Vector(binding.forward, binding.backfill).map(row => Row.fromSeq(row.toSeq.take(8)))
+        val bindingRows = Vector(binding.forwardTwin, binding.backfillTwin).map(row => Row.fromSeq(row.toSeq.take(8)))
         val keyedBinding = smallRows(frame(spark, bindingRows, RelationSchema).withComparisonKey, "Binding keys")
         require(keyedBinding.map(_.getAs[Row]("comparisonKey")).distinct.size == 1, "Binding keys did not sort names")
         require(multiset(keyedBinding.map(row => Row.fromSeq(row.toSeq.take(8)))) == multiset(bindingRows),
@@ -707,6 +714,7 @@ private object StepFiveCheckOps:
 
     /**
      * Reads one bounded historical result table outside the new output registry.
+     * Renames the older forward/backfill twin columns to forwardTwin/backfillTwin when present.
      *
      * @param spark existing session using the established credential provider
      * @param runId historical run selected by the caller
@@ -715,6 +723,8 @@ private object StepFiveCheckOps:
      */
     private def readBaseline(spark: SparkSession, runId: String, table: String): DataFrame =
         val data = spark.read.format("delta").load(s"$OutputPrefix$runId/$table/")
+            .withColumnRenamed("forward", "forwardTwin")
+            .withColumnRenamed("backfill", "backfillTwin")
         frame(spark, smallRows(data, s"baseline $table"), data.schema)
 
     /**

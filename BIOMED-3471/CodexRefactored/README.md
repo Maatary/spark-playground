@@ -138,7 +138,7 @@ The implementation defines the straight and crossed tuple expressions once, then
 
 ### Column mapping and stored order
 
-The `forward` and `backfill` structs retain `node1_urn`, `node1_name`, `node2_urn` and `node2_name`. Their columns follow canonical relation order: regulator then target for directed relations, and lexicographic node TERMite ID order for undirected partners. Canonical-ID reconstruction uses that existing order directly.
+The `forwardTwin` and `backfillTwin` structs retain `node1_urn`, `node1_name`, `node2_urn` and `node2_name`. Their columns follow canonical relation order: regulator then target for directed relations, and lexicographic node TERMite ID order for undirected partners. Canonical-ID reconstruction uses that existing order directly.
 
 Each tuple lists the pair for forward-flow node 1 first and the pair for forward-flow node 2 second. Directed tuples therefore list the regulator before the target. Both alternatives of an unresolved twin pair use the same convention. When forward flow repeats one node, corresponding backfill columns provide the listing order for its two pairs.
 
@@ -195,16 +195,16 @@ canonicalRelations
 
 nonIdenticalTwinPairs
   forwardCanonicalId, backfillCanonicalId,
-  nonIdenticalTwinsAlsoWithinForwardFlow, forward, backfill
+  nonIdenticalTwinsAlsoWithinForwardFlow, forwardTwin, backfillTwin
 
-forward and backfill structs
+forwardTwin and backfillTwin structs
   canonicalId, relationship_type, direction,
   node1_urn, node1_name, node2_urn, node2_name, sources, comparisonKey
   comparisonKey: relationship_type, nodeNames
 
 twinPairsWithNameMatchedNodePairTuples
   forwardCanonicalId, backfillCanonicalId,
-  nonIdenticalTwinsAlsoWithinForwardFlow, forward, backfill,
+  nonIdenticalTwinsAlsoWithinForwardFlow, forwardTwin, backfillTwin,
   nameMatchedNodePairTuples
 
 nameMatchedNodePairTuples
@@ -290,7 +290,7 @@ With no arguments, `StepFiveChecks` runs the local fixtures. `--baseline-run` al
 
 The suite covers complete tuple contents, including repeated records, retained canonical relations and flags, roles, exact field/type/column order, selected detailed entries, unresolved alternatives and distinct twin-pair counts. Fixtures cover all four undirected cases, directed roles, self-reference on either or both sides, every shared-node position, name matching across capitalization and leading/trailing spaces and node-URN identity across node types.
 
-Saved-output regression reads the twin-pair and Step 5 tables and compares tuple contents, metadata, detail multiplicities and counts. The fixtures cover unresolved twin pairs, including their two alternatives and exclusion from selected detail.
+Saved-output regression reads the twin-pair and Step 5 tables and compares tuple contents, metadata, detail multiplicities and counts. Older saved runs use `forward` and `backfill`; the reader renames these to `forwardTwin` and `backfillTwin` for comparison. The fixtures cover unresolved twin pairs, including their two alternatives and exclusion from selected detail.
 
 The repository's existing `project.scala` supplies Scala, Spark, Delta, Hadoop/AWS and JVM module options.
 

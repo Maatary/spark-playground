@@ -118,7 +118,7 @@ For each established non-identical twin pair:
 
 ## Stored node pairs and tuple order
 
-The `forward` and `backfill` structs store each relation's nodes in `node1_urn`, `node1_name`, `node2_urn` and `node2_name`. These fields preserve each node's name and canonical position. For directed relations, position 1 is regulator and position 2 is target.
+The `forwardTwin` and `backfillTwin` structs store each relation's nodes in `node1_urn`, `node1_name`, `node2_urn` and `node2_name`. These fields preserve each node's name and canonical position. For directed relations, position 1 is regulator and position 2 is target.
 
 Two name-matched node pair tuples are equal when they contain the same node pairs with the same repetitions, regardless of listing order.
 
