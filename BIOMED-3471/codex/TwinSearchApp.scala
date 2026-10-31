@@ -57,13 +57,13 @@ object TwinSearchApp:
                 .withNameMatchedNodePairTuples
                 .pipe(data => writeAndReadDataset(data, config, "twinPairsWithNameMatchedNodePairTuples"))
 
-            val homonymousNodePairs = twinPairsWithNameMatchedNodePairTuples
-                .selectHomonymousNodePairs
-                .pipe(data => writeAndReadDataset(data, config, "homonymousNodePairs"))
+            val homonymousNodePairsPerTwinPair = twinPairsWithNameMatchedNodePairTuples
+                .selectHomonymousNodePairsPerTwinPair
+                .pipe(data => writeAndReadDataset(data, config, "homonymousNodePairsPerTwinPair"))
 
-            homonymousNodePairs
-                .aggregateHomonymousNodePairsWithTwinCount
-                .pipe(data => writeDataset(data, config, "homonymousNodePairsWithTwinCount"))
+            homonymousNodePairsPerTwinPair
+                .countTwinPairsPerHomonymousNodePair
+                .pipe(data => writeDataset(data, config, "twinPairCountPerHomonymousNodePair"))
 
             twinPairsWithNameMatchedNodePairTuples
                 .selectTwinPairsWithMultipleNameMatchedNodePairTuples

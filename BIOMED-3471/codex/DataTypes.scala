@@ -20,7 +20,7 @@ object DataTypes:
         "canonicalRelations",
         "nonIdenticalTwinPairs",
         "twinPairsWithNameMatchedNodePairTuples",
-        "homonymousNodePairs",
-        "homonymousNodePairsWithTwinCount",
+        "homonymousNodePairsPerTwinPair",
+        "twinPairCountPerHomonymousNodePair",
         "twinPairsWithMultipleNameMatchedNodePairTuples"
     )

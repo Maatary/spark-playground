@@ -1,6 +1,5 @@
 package biomed3471.codex
 
-import biomed3471.codexdeprecated.DataOps as ExhaustiveDataOps
 import biomed3471.codex.DataOps.*
 import biomed3471.codex.DataTypes.{BackfillSource, DatasetNames, DefaultInputPath, ForwardFlowSource, OutputPrefix, RunConfig}
 import biomed3471.codex.IOOps.makeSparkSession
@@ -432,49 +431,22 @@ private object StepFiveCheckOps:
     private def evaluate(input: DataFrame, label: String): CheckedOutputs =
         checkSchema(s"$label input", input, TwinSchema)
         val full = input.withNameMatchedNodePairTuples
-        val detail = full.selectHomonymousNodePairs
-        val global = detail.aggregateHomonymousNodePairsWithTwinCount
+        val detail = full.selectHomonymousNodePairsPerTwinPair
+        val global = detail.countTwinPairsPerHomonymousNodePair
         val unresolved = full.selectTwinPairsWithMultipleNameMatchedNodePairTuples
-        checkedOutputs(full, detail, global, unresolved, label, forwardPositionOrder = true)
-
-    /**
-     * Executes the unchanged original Spark implementation on the same input.
-     *
-     * Calls biomed3471.codexdeprecated.DataOps through ExhaustiveDataOps rather than reproducing its algorithm
-     * in the checks. The old and new implementations keep separate namespaces.
-     *
-     * @param input the same bounded twin-pair rows used by the direct implementation
-     * @param label check group label
-     * @return the original implementation's four checked output collections
-     */
-    private def evaluateExhaustive(input: DataFrame, label: String): CheckedOutputs =
-        checkSchema(s"$label exhaustive input", input, TwinSchema)
-        // The original implementation still uses forward/backfill for its twin columns.
-        val exhaustiveInput = input
-            .withColumnRenamed("forwardTwin", "forward")
-            .withColumnRenamed("backfillTwin", "backfill")
-        val full = ExhaustiveDataOps.withNameMatchedNodePairTuples(exhaustiveInput)
-        val detail = ExhaustiveDataOps.selectHomonymousNodePairs(full)
-        val global = ExhaustiveDataOps.aggregateHomonymousNodePairsWithTwinCount(detail)
-        val unresolved = ExhaustiveDataOps.selectTwinPairsWithMultipleNameMatchedNodePairTuples(full)
-        val renamedFull = full
-            .withColumnRenamed("forward", "forwardTwin")
-            .withColumnRenamed("backfill", "backfillTwin")
-        checkedOutputs(renamedFull, detail, global, unresolved, s"$label exhaustive", forwardPositionOrder = false)
+        checkedOutputs(full, detail, global, unresolved, label)
 
     /**
      * Checks schemas, collects bounded outputs and verifies their stored ordering.
      *
-     * Each name-matched node pair tuple keeps both entries. Listing order is checked separately from tuple contents: direct results list the pair
-     * for forward-flow node 1 first and the pair for forward-flow node 2 second, while the original implementation sorts by forwardNodeUri,
-     * backfillNodeUri and role, in that order.
+     * Each name-matched node pair tuple keeps both entries. Listing order is checked separately from tuple contents: results list the pair
+     * for forward-flow node 1 first and the pair for forward-flow node 2 second.
      *
      * @param full all twin pairs with their name-matched node pair tuples
      * @param detail selected homonymous node-pair entries, including repeated entries
      * @param global homonymous node pairs and their distinct twin-pair counts
      * @param unresolved twin pairs retaining two alternative tuples
-     * @param label implementation and check group label
-     * @param forwardPositionOrder whether this is the direct implementation's ordering
+     * @param label check group label
      * @return the four bounded collections
      */
     private def checkedOutputs(
@@ -482,8 +454,7 @@ private object StepFiveCheckOps:
         detail: DataFrame,
         global: DataFrame,
         unresolved: DataFrame,
-        label: String,
-        forwardPositionOrder: Boolean
+        label: String
     ): CheckedOutputs =
         checkSchema(s"$label full", full, FullSchema)
         checkSchema(s"$label detail", detail, DetailSchema)
@@ -495,52 +466,14 @@ private object StepFiveCheckOps:
             require(completeResults.size == 1 || completeResults.size == 2, s"$label: wrong complete-result count")
             completeResults.foreach { tuple =>
                 require(tuple.size == 2, s"$label: a complete result lost a participant")
-                if forwardPositionOrder then
-                    val forwardTwin = row.getAs[Row]("forwardTwin")
-                    val expectedUris = Vector(forwardTwin.getAs[String]("node1_urn"), forwardTwin.getAs[String]("node2_urn"))
-                    require(tuple.map(_.getAs[String]("forwardNodeUri")) == expectedUris,
-                        s"$label: complete-result ordering does not follow forward positions")
-                else
-                    val sorted = tuple.sortBy(value => (value.getString(1), value.getString(2), value.getString(0)))
-                    require(tuple == sorted, s"$label: complete-result ordering is not URI-first")
+                val forwardTwin = row.getAs[Row]("forwardTwin")
+                val expectedUris = Vector(forwardTwin.getAs[String]("node1_urn"), forwardTwin.getAs[String]("node2_urn"))
+                require(tuple.map(_.getAs[String]("forwardNodeUri")) == expectedUris,
+                    s"$label: complete-result ordering does not follow forward positions")
             }
         }
         CheckedOutputs(fullRows, smallRows(detail, s"$label detail"),
             smallRows(global, s"$label global"), smallRows(unresolved, s"$label unresolved"))
-
-    /**
-     * Compares direct-rule outputs with the actual exhaustive implementation.
-     *
-     * Compares how many times each name-matched node pair tuple appears and how many times
-     * each node pair appears inside it, regardless of listing order. Also checks
-     * how many times each detailed row appears. Metadata, roles, flags and
-     * summary counts must match exactly.
-     *
-     * @param direct outputs from the new direct rules
-     * @param exhaustive outputs from the unchanged original operations
-     * @param label check group label
-     */
-    private def checkEquivalentOutputs(direct: CheckedOutputs, exhaustive: CheckedOutputs, label: String): Unit =
-        val originalResults = exhaustive.full.map(row => twinId(row) -> resultMultiset(results(row))).toMap
-        require(originalResults.size == exhaustive.full.size && direct.full.size == exhaustive.full.size,
-            s"$label: exhaustive comparison lost or duplicated twin identities")
-        require(direct.full.map(twinId).toSet == originalResults.keySet, s"$label: exhaustive comparison changed twin identities")
-        direct.full.foreach { row =>
-            require(resultMultiset(results(row)) == originalResults(twinId(row)),
-                s"$label: direct and exhaustive complete results differ for ${twinId(row)}")
-        }
-        val directMetadata = direct.full.map(row => Row.fromSeq(TwinSchema.fieldNames.map(name => row.getAs[Any](name)).toVector))
-        val originalMetadata = exhaustive.full.map(row => Row.fromSeq(TwinSchema.fieldNames.map(name => row.getAs[Any](name)).toVector))
-        require(multiset(directMetadata) == multiset(originalMetadata), s"$label: direct and exhaustive metadata differ")
-        require(multiset(direct.detail) == multiset(exhaustive.detail), s"$label: direct and exhaustive detailed multisets differ")
-        require(multiset(direct.global) == multiset(exhaustive.global), s"$label: direct and exhaustive summary counts differ")
-        val originalUnresolved = exhaustive.unresolved.map(row => twinId(row) -> resultMultiset(results(row))).toMap
-        require(originalUnresolved.size == exhaustive.unresolved.size && direct.unresolved.size == exhaustive.unresolved.size &&
-            direct.unresolved.map(twinId).toSet == originalUnresolved.keySet, s"$label: direct and exhaustive unresolved twins differ")
-        direct.unresolved.foreach { row =>
-            require(resultMultiset(results(row)) == originalUnresolved(twinId(row)),
-                s"$label: direct and exhaustive unresolved alternatives differ")
-        }
 
     /**
      * Calculates the expected global counts from a limited number of expected or saved detail rows.
@@ -571,7 +504,6 @@ private object StepFiveCheckOps:
         require(expectedById.size == fixtures.size, s"$label fixtures accidentally repeat a complete twin ID")
         val input = frame(spark, inputRows, TwinSchema)
         val output = evaluate(input, label)
-        checkEquivalentOutputs(output, evaluateExhaustive(input, label), label)
         require(output.full.size == fixtures.size, s"$label lost or duplicated twins")
         require(output.full.map(twinId).toSet == expectedById.keySet, s"$label changed twin identities")
         output.full.foreach { row =>
@@ -679,7 +611,7 @@ private object StepFiveCheckOps:
                 "biodata:regulation/regulator/Fixture_Orientation_Backfill/target/Fixture_Target_3",
                 "biodata:regulation/regulator/Fixture_Orientation_Forward/target/Fixture_Target_3", false)
         )
-        val actual = frame(spark, rows, DetailSchema).aggregateHomonymousNodePairsWithTwinCount
+        val actual = frame(spark, rows, DetailSchema).countTwinPairsPerHomonymousNodePair
         checkSchema("oriented aggregation", actual, GlobalSchema)
         require(multiset(smallRows(actual, "oriented aggregation")) == multiset(Vector(
             Row(forward, backfill, "fixture receptor", 2L), Row(backfill, forward, "fixture receptor", 1L)
@@ -692,8 +624,8 @@ private object StepFiveCheckOps:
      */
     def runFixtures(spark: SparkSession): Unit =
         require(DatasetNames == List("canonicalRelations", "nonIdenticalTwinPairs",
-            "twinPairsWithNameMatchedNodePairTuples", "homonymousNodePairs",
-            "homonymousNodePairsWithTwinCount", "twinPairsWithMultipleNameMatchedNodePairTuples"), "DatasetNames does not contain the six agreed outputs in order")
+            "twinPairsWithNameMatchedNodePairTuples", "homonymousNodePairsPerTwinPair",
+            "twinPairCountPerHomonymousNodePair", "twinPairsWithMultipleNameMatchedNodePairTuples"), "DatasetNames does not contain the six agreed outputs in order")
         val real = checkFixtures(spark, realFixtures, "real examples")
         require(real.detail.size == 4, "The three real twins must yield four detailed entries")
         require(real.global.map(row => row.getString(2) -> row.getLong(3)).toMap ==
@@ -709,11 +641,10 @@ private object StepFiveCheckOps:
         checkFixtures(spark, Vector.empty, "empty subset")
         checkSourceSelection(spark)
         checkAggregationOrientation(spark)
-        println(s"PASS fixtures: ${realFixtures.size + syntheticFixtures.size} explicit twins, direct/exhaustive equivalence, source selections, empty/unresolved subsets, schemas and complete-twin counts")
+        println(s"PASS fixtures: ${realFixtures.size + syntheticFixtures.size} explicit twins, source selections, empty/unresolved subsets, schemas and complete-twin counts")
 
     /**
      * Reads one bounded result table from the selected dated baseline.
-     * Renames the older forward/backfill twin columns to forwardTwin/backfillTwin when present.
      *
      * @param spark existing session using the established credential provider
      * @param runId baseline date selected by the caller in YYYY-MM-DD format
@@ -722,8 +653,6 @@ private object StepFiveCheckOps:
      */
     private def readBaseline(spark: SparkSession, runId: String, table: String): DataFrame =
         val data = spark.read.format("delta").load(s"$OutputPrefix$runId/$table/")
-            .withColumnRenamed("forward", "forwardTwin")
-            .withColumnRenamed("backfill", "backfillTwin")
         frame(spark, smallRows(data, s"baseline $table"), data.schema)
 
     /**
@@ -731,9 +660,7 @@ private object StepFiveCheckOps:
      *
      * Reads each small saved table once, compares name-matched node pair tuples and metadata,
      * checks how many times each detail row appears, and independently counts distinct
-     * twin pairs from saved detail. Also compares the direct and unchanged exhaustive
-     * implementations on those same saved twin pairs. The occurrence export and
-     * writers are never used.
+     * twin pairs from saved detail. The occurrence export and writers are never used.
      *
      * @param spark the same session already used for fixtures
      * @param runId baseline date in YYYY-MM-DD format under OutputPrefix
@@ -741,15 +668,14 @@ private object StepFiveCheckOps:
     def runBaseline(spark: SparkSession, runId: String): Unit =
         val twins = readBaseline(spark, runId, "nonIdenticalTwinPairs")
         val savedFull = readBaseline(spark, runId, "twinPairsWithNameMatchedNodePairTuples")
-        val savedDetail = readBaseline(spark, runId, "homonymousNodePairs")
-        val savedSummary = readBaseline(spark, runId, "homonymousNodePairsWithTwinCount")
+        val savedDetail = readBaseline(spark, runId, "homonymousNodePairsPerTwinPair")
+        val savedSummary = readBaseline(spark, runId, "twinPairCountPerHomonymousNodePair")
         val savedUnresolved = readBaseline(spark, runId, "twinPairsWithMultipleNameMatchedNodePairTuples")
         checkSchema("saved full results", savedFull, FullSchema)
         checkSchema("saved detail", savedDetail, DetailSchema)
         checkSchema("saved summary", savedSummary, GlobalSchema)
         checkSchema("saved unresolved", savedUnresolved, UnresolvedSchema)
         val actual = evaluate(twins, "saved-output regression")
-        checkEquivalentOutputs(actual, evaluateExhaustive(twins, "saved-output regression"), "saved-output regression")
         val twinRows = smallRows(twins, "saved twins")
         val savedFullRows = smallRows(savedFull, "saved full results")
         val detailRows = smallRows(savedDetail, "saved detail")

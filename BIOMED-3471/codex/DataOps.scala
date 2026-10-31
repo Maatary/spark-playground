@@ -316,7 +316,7 @@ object DataOps:
          * @return
          *   homonymous node-pair entries with the exact seven-column detail schema
          */
-        def selectHomonymousNodePairs: DataFrame =
+        def selectHomonymousNodePairsPerTwinPair: DataFrame =
             twinPairsWithNameMatchedNodePairTuples
                 .where(size(col("nameMatchedNodePairTuples")) === 1)
                 .select(
@@ -356,7 +356,7 @@ object DataOps:
                 .where(size(col("nameMatchedNodePairTuples")) === 2)
                 .select("forwardCanonicalId", "backfillCanonicalId", "nameMatchedNodePairTuples")
 
-    extension (homonymousNodePairs: DataFrame)
+    extension (homonymousNodePairsPerTwinPair: DataFrame)
 
         /**
          * Aggregates homonymous node pairs and counts the distinct resolved twin pairs containing them.
@@ -368,13 +368,13 @@ object DataOps:
          *
          * Selects node URNs, normalized name and the LongType twin-pair count in that order.
          *
-         * The receiver homonymousNodePairs contains selected detailed entries, including repeated entries.
+         * The receiver homonymousNodePairsPerTwinPair contains selected detailed entries, including repeated entries.
          *
          * @return
          *   one row per forward-flow/backfill node pair, its name and nonIdenticalTwinPairCount
          */
-        def aggregateHomonymousNodePairsWithTwinCount: DataFrame =
-            homonymousNodePairs
+        def countTwinPairsPerHomonymousNodePair: DataFrame =
+            homonymousNodePairsPerTwinPair
                 .groupBy("forwardNodeUri", "backfillNodeUri", "matchedNodeName")
                 .agg(
                   count_distinct(

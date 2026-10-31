@@ -37,8 +37,8 @@ object IOOps:
      * Creates the local Spark session using the existing Playground S3 setup.
      *
      * Reuses S3A for s3/s3a/s3n and the AWS SDK default credential provider.
-     * Local execution uses all available cores. Partitioned shuffles, disabled
-     * broadcast joins, disk-backed uploads and spill directories manage memory
+     * Local execution uses all available cores. The 32 MiB input partition limit,
+     * partitioned shuffles, disabled broadcast joins, disk-backed uploads and spill directories manage memory
      * demand. The JVM heap size is supplied by the launch command.
      *
      * @param config run-specific local scratch directory
@@ -60,6 +60,7 @@ object IOOps:
             .config("spark.local.dir", spill.toString)
             .config("spark.driver.maxResultSize", "64m")
             .config("spark.memory.offHeap.enabled", "false")
+            .config("spark.sql.files.maxPartitionBytes", "32m")
             .config("spark.sql.shuffle.partitions", "256")
             .config("spark.sql.autoBroadcastJoinThreshold", "-1")
             .config("spark.sql.adaptive.autoBroadcastJoinThreshold", "-1")

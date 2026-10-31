@@ -6,7 +6,7 @@ A **canonical relation** is one relation type between two specific nodes in thei
 
 Step 5 determines which nodes go together within each twin pair. From resolved twin pairs, it selects pairs of different nodes with the same normalized name—the **homonymous node pairs**—to investigate.
 
-This is the current implementation, in package `biomed3471.codex`. The [deprecated implementation](../CodexDeprecated/README.md), in package `biomed3471.codexdeprecated`, provides an independent reference for the Step 5 results.
+This implementation is in package `biomed3471.codex`.
 
 ## Input and twin matching
 
@@ -150,13 +150,13 @@ Once the two node pairs are determined, keep both in the name-matched node pair 
 
 A `nameMatchedNodePairTuple` stores the two node pairs as records with fields `role`, `forwardNodeUri`, `backfillNodeUri` and `matchedNodeName`. `nameMatchedNodePairTuples` holds one such tuple for a resolved twin pair, or two separate tuples for an unresolved twin pair.
 
-`twinPairsWithNameMatchedNodePairTuples` retains each twin pair, including both canonical relations, with its result. For twin pairs with one tuple, `homonymousNodePairs` selects records with different node URNs. Identical node pairs remain in the tuple. The detailed output retains both entries when two self-referencing relations produce the same node pair twice.
+`twinPairsWithNameMatchedNodePairTuples` retains each twin pair, including both canonical relations, with its result. For twin pairs with one tuple, `homonymousNodePairsPerTwinPair` selects records with different node URNs. Identical node pairs remain in the tuple. The detailed output retains both entries when two self-referencing relations produce the same node pair twice.
 
-Unresolved twin pairs retain both alternatives in the full twin-pair table and in `twinPairsWithMultipleNameMatchedNodePairTuples`. They contribute no entries to `homonymousNodePairs` or `homonymousNodePairsWithTwinCount`.
+Unresolved twin pairs retain both alternatives in the full twin-pair table and in `twinPairsWithMultipleNameMatchedNodePairTuples`. They contribute no entries to `homonymousNodePairsPerTwinPair` or `twinPairCountPerHomonymousNodePair`.
 
 ### Count distinct twin pairs for each homonymous node pair
 
-`homonymousNodePairsWithTwinCount` groups by `forwardNodeUri`, `backfillNodeUri` and `matchedNodeName`, then counts distinct twin pairs using both `forwardCanonicalId` and `backfillCanonicalId`. Each node has one name, so the forward-flow/backfill node URN pair already fixes the normalized name. Including that name in the grouping retains it directly without splitting a node-pair group or picking a name from one row. A twin pair contributes once to a node pair's count when both positions produce that pair. Different twin pairs sharing one canonical relation ID still count separately. Role and the forward-flow flag remain in the detail and do not split these groups.
+`twinPairCountPerHomonymousNodePair` groups by `forwardNodeUri`, `backfillNodeUri` and `matchedNodeName`, then counts distinct twin pairs using both `forwardCanonicalId` and `backfillCanonicalId`. Each node has one name, so the forward-flow/backfill node URN pair already fixes the normalized name. Including that name in the grouping retains it directly without splitting a node-pair group or picking a name from one row. A twin pair contributes once to a node pair's count when both positions produce that pair. Different twin pairs sharing one canonical relation ID still count separately. Role and the forward-flow flag remain in the detail and do not split these groups.
 
 ## Saved-table flow
 
@@ -164,8 +164,8 @@ Unresolved twin pairs retain both alternatives in the full twin-pair table and i
 canonicalRelations [write/read]
   -> nonIdenticalTwinPairs [write/read]
       -> twinPairsWithNameMatchedNodePairTuples [write/read]
-          -> homonymousNodePairs [write/read]
-              -> homonymousNodePairsWithTwinCount [write]
+          -> homonymousNodePairsPerTwinPair [write/read]
+              -> twinPairCountPerHomonymousNodePair [write]
           -> twinPairsWithMultipleNameMatchedNodePairTuples [write]
 ```
 
@@ -182,8 +182,8 @@ s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/YYYY-MM-DD/<table>/
 | `canonicalRelations` | One canonical relation, with its node fields and the set of sources of its relation occurrences. | Which canonical relations occur in the forward flow, the backfill, or both? |
 | `nonIdenticalTwinPairs` | One non-identical twin pair, retaining both canonical relations and the flag `nonIdenticalTwinsAlsoWithinForwardFlow`. | Which forward-only canonical relations have non-identical twins in backfill? |
 | `twinPairsWithNameMatchedNodePairTuples` | One twin pair with its complete name-matched node-pair results: one tuple when resolved, or two alternative tuples when unresolved. Each tuple contains two node pairs. | What are the corresponding nodes in each twin pair, including both identical and homonymous node pairs? |
-| `homonymousNodePairs` | One homonymous node-pair entry from a resolved twin pair, with its normalized name, role, both canonical IDs and the forward-flow flag. Repeated entries remain. | Which different nodes share the same normalized name, and in which twin pairs and roles were they found? |
-| `homonymousNodePairsWithTwinCount` | One distinct homonymous node pair, its normalized name and `nonIdenticalTwinPairCount`. | Which node pairs need investigation, and how many distinct resolved non-identical twin pairs contain each? |
+| `homonymousNodePairsPerTwinPair` | One homonymous node-pair entry from a resolved twin pair, with its normalized name, role, both canonical IDs and the forward-flow flag. Repeated entries remain. | Which different nodes share the same normalized name, and in which twin pairs and roles were they found? |
+| `twinPairCountPerHomonymousNodePair` | One distinct homonymous node pair, its normalized name and `nonIdenticalTwinPairCount`. | Which node pairs need investigation, and how many distinct resolved non-identical twin pairs contain each? |
 | `twinPairsWithMultipleNameMatchedNodePairTuples` | One non-identical twin pair's canonical IDs and its two alternative name-matched node pair tuples. | Which established twin pairs remain unresolved, and what are the alternatives? |
 
 The column order is part of the output contract:
@@ -212,12 +212,12 @@ nameMatchedNodePairTuples
     each result: array of exactly two structs
       role, forwardNodeUri, backfillNodeUri, matchedNodeName
 
-homonymousNodePairs
+homonymousNodePairsPerTwinPair
   forwardNodeUri, backfillNodeUri, matchedNodeName, role,
   forwardCanonicalId, backfillCanonicalId,
   nonIdenticalTwinsAlsoWithinForwardFlow
 
-homonymousNodePairsWithTwinCount
+twinPairCountPerHomonymousNodePair
   forwardNodeUri, backfillNodeUri, matchedNodeName,
   nonIdenticalTwinPairCount
 
@@ -254,27 +254,27 @@ The two luteolin entries link one homonymous node pair to two twin pairs. The do
 | `DataOps.scala` | Native Spark expressions for canonical identity, twin matching and domain node-pair correspondence |
 | `IOOps.scala` | Local Spark/S3 configuration and sequential Delta persistence |
 | `TwinSearchApp.scala` | Pipeline orchestration and Spark shutdown |
-| `StepFiveChecks.scala` | Explicit fixtures, comparison with the original Spark implementation and saved-output regression |
+| `StepFiveChecks.scala` | Explicit fixtures and read-only regression against saved outputs |
 | `ExploreApp.scala` | Ad hoc inspection of occurrence schemas and current twin counts |
 
 Pure operations live in the operations modules; data declarations remain behavior-free. Transformations use built-in Spark expressions.
 
 ## Validation and check commands
 
-Historical validation on 30 October 2026 passed 20 explicit twin-pair fixtures, equivalence with the deprecated implementation, source selections, empty/unresolved subsets, schemas and distinct twin-pair counts. The ordering checks distinguish this implementation's forward-position order from the deprecated implementation's order by node URN.
+Historical validation on 30 October 2026 passed 20 explicit twin-pair fixtures, equivalence with the then-present deprecated implementation, source selections, empty/unresolved subsets, schemas and distinct twin-pair counts. That suite checked this implementation's forward-position order and the deprecated implementation's order by node URN separately.
 
-The full run for `2026-10-31` completed with a 4 GiB heap and exit status 0. All six Delta tables committed beneath `s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/2026-10-31/` with these verified row counts:
+The `2026-10-31` rerun completed with a 4 GiB heap and exit status 0 at 18:13 UTC. All six Delta tables committed beneath `s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/2026-10-31/` with these verified row counts:
 
-| Table | Committed row count |
+| Stored table | Committed row count |
 |---|---:|
 | `canonicalRelations` | 15,060,586 |
 | `nonIdenticalTwinPairs` | 1,911 |
 | `twinPairsWithNameMatchedNodePairTuples` | 1,911 |
-| `homonymousNodePairs` | 1,942 |
-| `homonymousNodePairsWithTwinCount` | 157 |
+| `homonymousNodePairsPerTwinPair` | 1,942 |
+| `twinPairCountPerHomonymousNodePair` | 157 |
 | `twinPairsWithMultipleNameMatchedNodePairTuples` | 0 |
 
-These counts were verified from the initial Delta commits and match the previous full run. The saved schemas also match, with the twin structs renamed to `forwardTwin` and `backfillTwin`. No fixture suite or saved-output regression was run during this rename and rerun.
+Verification of the new Delta commits confirmed these row counts and schemas matching the prior run. Every referenced data file was present with its recorded size. The old detail and summary output prefixes were absent, and the input Delta log was unchanged. No fixture suite or saved-output regression was run for this rerun.
 
 ```zsh
 cd /Users/maatari/Dev/IdeaProjects/spark-playground
@@ -286,7 +286,7 @@ scala run . -M biomed3471.codex.StepFiveChecks --java-opt=-Xmx4g -- \
   --baseline-run 2026-10-31
 ```
 
-With no arguments, `StepFiveChecks` runs the local fixtures. `--baseline-run YYYY-MM-DD` also runs read-only regression against the current implementation's saved output for that date in the same Spark session. The suite compares explicit expected results with this direct implementation and `biomed3471.codexdeprecated.DataOps`, imported as `ExhaustiveDataOps`, on the same twin-pair inputs.
+With no arguments, `StepFiveChecks` runs the local fixtures, comparing the implementation's results with explicit expectations for each twin pair. `--baseline-run YYYY-MM-DD` also runs read-only regression against the saved output for that date in the same Spark session.
 
 The suite covers complete tuple contents, including repeated records, retained canonical relations and flags, roles, exact field/type/column order, selected detailed entries, unresolved alternatives and distinct twin-pair counts. Fixtures cover all four undirected cases, directed roles, self-reference on either or both sides, every shared-node position, name matching across capitalization and leading/trailing spaces and node-URN identity across node types.
 
@@ -316,7 +316,7 @@ This Delta source contains Wytze’s complete original export with its 16 column
 
 Scratch is created automatically at `<java.io.tmpdir>/biomed3471-codex/YYYY-MM-DD/`. It contains Spark spill and disk-backed S3 upload buffers. The program does not delete previous scratch data.
 
-The launch option sets a 4 GiB Java heap. Spark uses `local[*]`, 256 initial shuffle partitions, 32 MiB AQE advisory partitions, disabled broadcast joins and disk spill. S3 uploads use disk buffers with one active block per stream.
+The launch option sets a 4 GiB Java heap. Spark uses `local[*]`, a 32 MiB file-scan partition limit, 256 initial shuffle partitions, 32 MiB AQE advisory partitions, disabled broadcast joins and disk spill. The file-scan limit was added to reduce per-task aggregation memory after the previous 4 GiB attempt ran out of heap during canonical-relation aggregation. S3 uploads use disk buffers with one active block per stream.
 
 S3 access reuses the existing S3A configuration and `software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider`. Refresh an expired non-PROD session using `~/aws-login-nonprod`.
 

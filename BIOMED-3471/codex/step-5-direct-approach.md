@@ -144,8 +144,8 @@ Both tuple expressions produce this stored order directly.
 
 Each name-matched node pair tuple retains both node pairs, including any identical node pair. `nameMatchedNodePairTuples` retains one two-record tuple when the twin pair is resolved, or two two-record alternatives when it remains unresolved. The twin pair remains one row in `twinPairsWithNameMatchedNodePairTuples` in either case.
 
-For a twin pair with one tuple, `homonymousNodePairs` selects its records whose full node URNs differ. Identical node pairs remain in the tuple. When both relations are self-referencing, both records remain in the detailed output: directed records retain their different roles, while undirected records have identical contents.
+For a twin pair with one tuple, `homonymousNodePairsPerTwinPair` selects its records whose full node URNs differ. Identical node pairs remain in the tuple. When both relations are self-referencing, both records remain in the detailed output: directed records retain their different roles, while undirected records have identical contents.
 
-For an unresolved twin pair, the output policy selects no records from either alternative into `homonymousNodePairs`. Both alternatives remain available in the full twin-pair table and in `twinPairsWithMultipleNameMatchedNodePairTuples`.
+For an unresolved twin pair, the output policy selects no records from either alternative into `homonymousNodePairsPerTwinPair`. Both alternatives remain available in the full twin-pair table and in `twinPairsWithMultipleNameMatchedNodePairTuples`.
 
-`homonymousNodePairsWithTwinCount` groups the selected detail by `forwardNodeUri`, `backfillNodeUri` and `matchedNodeName`, and counts distinct twin pairs using both `forwardCanonicalId` and `backfillCanonicalId`. Repeated detail records from one twin pair contribute once to that node pair's count. Unresolved twin pairs have no selected detail, so they do not contribute to this count.
+`twinPairCountPerHomonymousNodePair` groups the selected detail by `forwardNodeUri`, `backfillNodeUri` and `matchedNodeName`, and counts distinct twin pairs using both `forwardCanonicalId` and `backfillCanonicalId`. Repeated detail records from one twin pair contribute once to that node pair's count. Unresolved twin pairs have no selected detail, so they do not contribute to this count.
