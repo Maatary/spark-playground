@@ -30,7 +30,7 @@ Before identifying which nodes differ, Step 5 determines which node in the forwa
 
 A **name-matched node pair** contains one forward-flow node and one backfill node with the same normalized name. It is a **homonymous node pair** when their node URNs differ, and an **identical node pair** when the node URN is the same on both sides.
 
-A **name-matched node pair tuple** contains the two name-matched node pairs of one twin pair and accounts for both nodes in each relation. If a relation uses the same node twice, both uses must be accounted for.
+A **name-matched node pair tuple** contains the two name-matched node pairs of one twin pair and accounts for each use of a node once in each relation. If a relation uses the same node twice, both uses must be retained. A twin pair is **resolved** when the rules determine one such tuple, and **unresolved** when two alternatives remain.
 
 ### Directed twins: pair nodes by role
 
@@ -80,7 +80,7 @@ Here, we need to distinguish a node appearing in both relations from a node appe
 
 In the examples below, `E1`, `E2`, `E3` and `E4` stand for distinct node URNs, all named EGFR. `E1 binds E2` uses two distinct nodes with the same name; `E1 binds E1` uses the same node twice and is self-referencing. Equal names alone establish neither self-reference nor a shared node.
 
-**A node is shared between the relations.** Pair that node with itself. Once this identical node pair is fixed, pair the other forward-flow partner with the other backfill partner. For `E1 binds E2` versus `E2 binds E3`, pair `E2` with `E2`, and `E1` with `E3`.
+**A node is shared between the relations.** Pair that node with itself. That accounts for one use of the node in each relation; pair the remaining forward-flow node with the remaining backfill node. For `E1 binds E2` versus `E2 binds E3`, pair `E2` with `E2`, and `E1` with `E3`.
 
 This case includes a self-referencing relation that shares its repeated node with its twin. For `E1 binds E1` versus `E1 binds E2`, pair `E1` with `E1`, and the second use of forward-flow `E1` with backfill `E2`.
 
@@ -101,9 +101,7 @@ In the last example, keep both pairs with identical contents: each relation uses
 | First | E1 with E3 | E2 with E4 |
 | Second | E1 with E4 | E2 with E3 |
 
-Both alternatives contain homonymous node pairs: their normalized names agree and their node identities differ. No shared node or repeated node determines which name-matched node pair tuple to select, so the twin pair remains unresolved.
-
-The [standalone Step 5 explanation](step-5-direct-approach.md) develops these same domain cases and their implementation.
+The four node pairs shown above are all homonymous: their normalized names agree and their node URNs differ. What remains unresolved is which of the two tuples to select; neither a shared node nor a repeated node distinguishes them.
 
 ## From domain rules to implementation
 
@@ -140,7 +138,16 @@ The implementation defines the straight and crossed tuple expressions once, then
 
 The `forwardTwin` and `backfillTwin` structs retain `node1_urn`, `node1_name`, `node2_urn` and `node2_name`. Their columns follow canonical relation order: regulator then target for directed relations, and lexicographic node TERMite ID order for undirected partners. Canonical-ID reconstruction uses that existing order directly.
 
-Each tuple lists the pair for forward-flow node 1 first and the pair for forward-flow node 2 second. Directed tuples therefore list the regulator before the target. Both alternatives of an unresolved twin pair use the same convention. When forward flow repeats one node, corresponding backfill columns provide the listing order for its two pairs.
+Each tuple lists the pair for forward-flow node 1 first and the pair for forward-flow node 2 second. Directed tuples therefore list the regulator before the target.
+
+The self-reference branch selects the straight tuple, which includes the identical node pair whenever a node is shared. These examples list the relation nodes in canonical position order:
+
+| Branch | Forward-flow relation | Backfill twin | Stored node pairs, in order |
+|---|---|---|---|
+| Self-reference | E2 binds E2 | E1 binds E2 | E2 with E1; E2 with E2 |
+| Shared node | E1 binds E2 | E2 binds E3 | E1 with E3; E2 with E2 |
+
+The shared-node rule determines the identical node pair first, but storage follows forward-flow position order. For an unresolved twin pair, `nameMatchedNodePairTuples` stores the straight alternative first and the crossed alternative second. Both tuples follow forward-flow position order.
 
 Construction supplies this deterministic order without a separate tuple sort. Two tuples have the same contents when they contain the same two node pairs, with repetitions counted, regardless of listing order. Each record keeps the forward-flow and backfill nodes in their respective fields.
 
@@ -150,7 +157,7 @@ Once the two node pairs are determined, keep both in the name-matched node pair 
 
 A `nameMatchedNodePairTuple` stores the two node pairs as records with fields `role`, `forwardNodeUri`, `backfillNodeUri` and `matchedNodeName`. `nameMatchedNodePairTuples` holds one such tuple for a resolved twin pair, or two separate tuples for an unresolved twin pair.
 
-`twinPairsWithNameMatchedNodePairTuples` retains each twin pair, including both canonical relations, with its result. For twin pairs with one tuple, `homonymousNodePairsPerTwinPair` selects records with different node URNs. Identical node pairs remain in the tuple. The detailed output retains both entries when two self-referencing relations produce the same node pair twice.
+`twinPairsWithNameMatchedNodePairTuples` retains each twin pair, including both canonical relations, with its result. For twin pairs with one tuple, `homonymousNodePairsPerTwinPair` selects records with different node URNs. Identical node pairs remain in the tuple. When both relations are self-referencing, both records remain in the detail: directed records retain their different roles, while undirected records have identical contents.
 
 Unresolved twin pairs retain both alternatives in the full twin-pair table and in `twinPairsWithMultipleNameMatchedNodePairTuples`. They contribute no entries to `homonymousNodePairsPerTwinPair` or `twinPairCountPerHomonymousNodePair`.
 
