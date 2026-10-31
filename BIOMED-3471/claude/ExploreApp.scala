@@ -9,26 +9,6 @@ import sparkops.SchemaEnforcementOps.*
 
 import scala.util.chaining.scalaUtilChainingOps
 
-//object TempDataTypes:
-//    case class RelationOccurrence(
-//        source_file      : String,
-//        s3_key           : String,
-//        node1_urn        : String,
-//        node1_name       : String,
-//        node2_urn        : String,
-//        node2_name       : String,
-//        relationship_type: String,
-//        direction        : String,
-//        confidence       : Option[String],
-//        doi              : String,
-//        source           : String,
-//        organism         : Option[String],
-//        celltype         : Option[String],
-//        cellLine         : Option[String],
-//        organ            : Option[String],
-//        tissue           : Option[String]
-//    )
-
 object ExploreApp:
 
     Logger.root
@@ -72,13 +52,13 @@ object ExploreApp:
 //            .filter($"direction" === "undirected")
 //            .show(10, truncate = false)
 
-        val canonicalsPath = "s3://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-30/canonicalRelations"
-
-        val canonicals = spark
-            .read
-            .delta(canonicalsPath)
-            .enforceAs[CanonicalRelation]($"canonicalId")
-            .tap { _.printSchema() }
+//        val canonicalsPath = "s3://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-30/canonicalRelations"
+//
+//        val canonicals = spark
+//            .read
+//            .delta(canonicalsPath)
+//            .enforceAs[CanonicalRelation]($"canonicalId")
+//            .tap { _.printSchema() }
 //
 //        canonicals
 ////            .filter($"node1_name" === "parathyroid hormone" || $"node2_name" === "parathyroid hormone")
@@ -87,36 +67,66 @@ object ExploreApp:
 //            .tap { _.show(10, truncate = false) }
 //            .tap { df => println(s"Canonical relations ${df.count()}") }
 
-        val nonIdenticalTwinPairs = spark
+//        val nonIdenticalTwinPairs = spark
+//            .read
+//            .format("delta")
+//            .load("s3://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-30/nonIdenticalTwinPairs")
+//            .tap {_.printSchema()}
+//            .tap { _.show(10, truncate = false) }
+//
+//
+//        nonIdenticalTwinPairs
+//            .count()
+//            .tap { count => println(s"Non-identical twin pairs count: $count") }
+//
+//
+//
+//        val forwardRelationsWithTwins = nonIdenticalTwinPairs
+//                .select("forwardTwin.*")
+//                .distinct()
+//
+//        forwardRelationsWithTwins
+//            .count()
+//            .tap { count => println(s"Forward relations with twins count: $count") }
+//
+//
+//        val backfillRelationsWithTwins = nonIdenticalTwinPairs
+//                .select("backfillTwin.*")
+//                .distinct()
+//
+//        backfillRelationsWithTwins
+//            .count()
+//            .tap { count => println(s"Backfill relations with twins count: $count") }
+
+
+
+        val twinPairsWithNameMatchedNodePairTuples = spark
             .read
             .format("delta")
-            .load("s3://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-30/nonIdenticalTwinPairs")
-            .tap {_.printSchema()}
+            .load("s3a://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-30/twinPairsWithNameMatchedNodePairTuples")
+            .tap { _.printSchema() }
             .tap { _.show(10, truncate = false) }
+            .tap { df => println(s"Twin pairs with name-matched node pair tuples count: ${df.count()}") }
 
 
-        nonIdenticalTwinPairs
-            .count()
-            .tap { count => println(s"Non-identical twin pairs count: $count") }
+        val homonymousNodePairs = spark
+            .read
+            .format("delta")
+            .load("s3a://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-30/homonymousNodePairs")
+            .tap { _.printSchema() }
+            .tap { _.show(10, truncate = false) }
+            .tap { df => println(s"Homonymous node pairs count: ${df.count()}") }
+            .tap { df =>
+                df.select("forwardNodeUri", "backfillNodeUri", "matchedNodeName")
+                    .distinct()
+                    .pipe { df => println(s"Distinct homonymous node pairs count: ${df.count()}") }
+            }
 
-
-
-        val forwardRelationsWithTwins = nonIdenticalTwinPairs
-                .select("forwardTwin.*")
-                .distinct()
-
-        forwardRelationsWithTwins
-            .count()
-            .tap { count => println(s"Forward relations with twins count: $count") }
-
-
-        val backfillRelationsWithTwins = nonIdenticalTwinPairs
-                .select("backfillTwin.*")
-                .distinct()
-
-        backfillRelationsWithTwins
-            .count()
-            .tap { count => println(s"Backfill relations with twins count: $count") }
-
+//        val twinPairCountPerHomonymousNodePair = spark
+//            .read
+//            .format("delta")
+//            .load("s3a://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-30/twinPairCountPerHomonymousNodePair")
+//            .tap {_.printSchema()}
+//            .tap { _.show(10, truncate = false) }
 
         spark.stop()
