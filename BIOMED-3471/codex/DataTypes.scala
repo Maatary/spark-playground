@@ -13,12 +13,3 @@ object DataTypes:
         "s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/wytze-relation-occurrences/"
 
     val OutputPrefix = "s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/"
-
-    val DatasetNames = List(
-        "canonicalRelations",
-        "nonIdenticalTwinPairs",
-        "twinPairsWithNameMatchedNodePairTuples",
-        "homonymousNodePairsPerTwinPair",
-        "twinPairCountPerHomonymousNodePair",
-        "twinPairsWithMultipleNameMatchedNodePairTuples"
-    )

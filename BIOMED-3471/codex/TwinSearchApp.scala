@@ -31,7 +31,6 @@ object TwinSearchApp:
      */
     def main(args: Array[String]): Unit =
         val runId = args(0)
-        require(runId.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}"), "Run date must be YYYY-MM-DD.")
         LocalDate.parse(runId)
         val config = RunConfig(
             inputPath = DefaultInputPath,

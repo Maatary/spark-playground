@@ -29,7 +29,6 @@ object IOOps:
      * @return that dataset's S3 directory
      */
     def datasetPath(config: RunConfig, datasetName: String): String =
-        require(DatasetNames.contains(datasetName), s"Unknown dataset: $datasetName")
         s"${outputPath(config)}$datasetName/"
 
     /**
