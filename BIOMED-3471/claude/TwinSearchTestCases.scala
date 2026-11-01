@@ -23,7 +23,7 @@ import scala.util.chaining.scalaUtilChainingOps
  * nodes named EGFR, and in test case 9 each relation is a Regulation from one of them to itself. The last five test cases
  * show what the first nine do not: rule B with the names in the same order in both relations, names that differ only in
  * letter case and in spaces at their ends, a node that appears in both relations at position 2 of the forward-flow relation,
- * and a backfill twin that also has forward-flow relation occurrences.
+ * and a backfill twin that is also supported by forward-flow relation occurrences.
  *
  * {{{
  * scala-cli run . --main-class biomed3471.claude.TwinSearchTestCases --java-opt -Xmx4g
@@ -131,19 +131,19 @@ object TwinSearchTestCases:
 
     /** Runs steps 1 to 5 on the relation occurrences of one test case, and collects what they find. */
     def foundResultOf(spark: SparkSession, relationOccurrences: List[RelationOccurrence])(
-        using Encoder[RelationOccurrence], Encoder[TwinPairAsPrinted], Encoder[NameMatchedNodePair], Encoder[HomonymousNodePairWithTwinCount]
+        using Encoder[RelationOccurrence], Encoder[TwinPairAsPrinted], Encoder[NameMatchedNodePair]
     ): TestCaseResult =
-        val twinPairsWithNameMatchedNodePairTuplesDF =
+        val twinPairsWithNameMatchedNodePairTuplesDS =
             spark
                 .createDataset(relationOccurrences)
                 .pipe { relationOccurrenceDS => computeCanonicalRelations(relationOccurrenceDS) }
                 .pipe { canonicalRelationsDS => computeNonIdenticalTwinPairs(canonicalRelationsDS) }
-                .pipe { nonIdenticalTwinPairsDF => computeTwinPairsWithNameMatchedNodePairTuples(nonIdenticalTwinPairsDF) }
+                .pipe { nonIdenticalTwinPairsDS => computeTwinPairsWithNameMatchedNodePairTuples(nonIdenticalTwinPairsDS) }
 
-        val homonymousNodePairsPerTwinPairDF = computeHomonymousNodePairsPerTwinPair(twinPairsWithNameMatchedNodePairTuplesDF)
+        val homonymousNodePairsPerTwinPairDS = computeHomonymousNodePairsPerTwinPair(twinPairsWithNameMatchedNodePairTuplesDS)
 
         val twinPairs =
-            twinPairsWithNameMatchedNodePairTuplesDF
+            twinPairsWithNameMatchedNodePairTuplesDS
                 .select(
                     col("forwardCanonicalId"),
                     col("backfillCanonicalId"),
@@ -155,7 +155,7 @@ object TwinSearchTestCases:
                 .toList
 
         val homonymousNodePairsPerTwinPair =
-            homonymousNodePairsPerTwinPairDF
+            homonymousNodePairsPerTwinPairDS
                 .select(col("role"), col("forwardNodeUri"), col("backfillNodeUri"), col("matchedNodeName"))
                 .as[NameMatchedNodePair]
                 .collect()
@@ -163,14 +163,13 @@ object TwinSearchTestCases:
                 .sortBy { nodePair => (nodePair.forwardNodeUri, nodePair.backfillNodeUri, nodePair.role) }
 
         val twinPairCountPerHomonymousNodePair =
-            computeTwinPairCountPerHomonymousNodePair(homonymousNodePairsPerTwinPairDF)
-                .as[HomonymousNodePairWithTwinCount]
+            computeTwinPairCountPerHomonymousNodePair(homonymousNodePairsPerTwinPairDS)
                 .collect()
                 .toList
                 .sortBy { nodePairWithTwinCount => (nodePairWithTwinCount.forwardNodeUri, nodePairWithTwinCount.backfillNodeUri) }
 
         val unresolvedTwinPairCount =
-            computeTwinPairsWithMultipleNameMatchedNodePairTuples(twinPairsWithNameMatchedNodePairTuplesDF)
+            computeTwinPairsWithMultipleNameMatchedNodePairTuples(twinPairsWithNameMatchedNodePairTuplesDS)
                 .count()
 
         TestCaseResult(twinPairs, homonymousNodePairsPerTwinPair, twinPairCountPerHomonymousNodePair, unresolvedTwinPairCount)
@@ -231,7 +230,7 @@ object TwinSearchTestCases:
      * and tells whether the two are the same.
      */
     def runTestCase(spark: SparkSession, testCaseNumber: Int, testCase: TestCase)(
-        using Encoder[RelationOccurrence], Encoder[TwinPairAsPrinted], Encoder[NameMatchedNodePair], Encoder[HomonymousNodePairWithTwinCount]
+        using Encoder[RelationOccurrence], Encoder[TwinPairAsPrinted], Encoder[NameMatchedNodePair]
     ): Boolean =
         val found    = foundResultOf(spark, testCase.relationOccurrences)
         val expected = expectedResultOf(testCase.expectedTwinPair)
@@ -477,7 +476,7 @@ object TwinSearchTestCases:
             ),
             TestCase(
                 rule                = "A",
-                description         = "the backfill twin also has a forward-flow relation occurrence, as in the luteolin example",
+                description         = "the backfill twin is also supported by a forward-flow relation occurrence, as in the luteolin example",
                 relationOccurrences = List(
                     regulationOccurrence(ForwardFlowSource, "biodata:smallmol/L1", "luteolin", "biodata:disease/D1", "Inflammation"),
                     regulationOccurrence(BackfillSource, "biodata:smallmol/L2", "luteolin", "biodata:disease/D1", "Inflammation"),

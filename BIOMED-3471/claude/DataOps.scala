@@ -4,6 +4,7 @@ import biomed3471.claude.DataTypes.*
 import org.apache.spark.sql.{Column, DataFrame, Dataset}
 import org.apache.spark.sql.functions.*
 import sparkops.SchemaEnforcementOps.*
+import io.github.pashashiz.spark_encoders.TypedEncoder.*
 
 /**
  * ==The five steps of the twin search==
@@ -55,8 +56,7 @@ object DataOps:
      * ==Step 2: one row for each canonical relation==
      *
      * Step 2 folds the relation occurrences of each canonical relation into their canonical relation as one row. Its column `sources` holds the
-     * sorted list of the distinct `source` values of the relation occurrences, which says which pipelines have relation occurrences of the canonical
-     * relation.
+     * sorted list of the distinct `source` values of the relation occurrences, which says which pipelines support the canonical relation.
      *
      * Step 2 relies on the guarantees that make the canonical relation ID fix every other column of the row except `sources`. The ID holds the
      * relation type and the two node TERMite IDs (section 2.2 of BioMed Data Identifier Schemes), and the relation type decides the direction. A node
@@ -88,8 +88,6 @@ object DataOps:
      */
     def normalizedName(name: Column): Column = lower(trim(name))
 
-
-
     extension (canonicalRelationsDS: Dataset[CanonicalRelation])
 
         /**
@@ -108,8 +106,8 @@ object DataOps:
          *
          * The relation type already determines whether the relation is directed or undirected, so the name key needs no separate direction field.
          *
-         * Step 3 stores the normalized names in `node1NormalizedName` and `node2NormalizedName` for steps 4 and 5 to reuse. The original names remain
-         * unchanged in `node1_name` and `node2_name`.
+         * Step 3 keeps the original names unchanged in `node1_name` and `node2_name`, and the normalized names only inside the name key. Step 5
+         * computes again, from the original names, the normalized names that it needs.
          *
          * The name key is a struct, which Spark prints like this:
          *
@@ -125,55 +123,55 @@ object DataOps:
             val nameKeyNodeNames    = when(col("direction") === Undirected, array_sort(normalizedNodeNames)).otherwise(normalizedNodeNames)
 
             canonicalRelationsDS
-                .withColumn("node1NormalizedName", node1NormalizedName)
-                .withColumn("node2NormalizedName", node2NormalizedName)
                 .withColumn("nameKey", struct(col("relationship_type"), nameKeyNodeNames.as("nodeNames")))
                 .enforceAs[CanonicalRelationWithNameKey](col("canonicalId"))
 
-
     /**
-     * One of the two canonical relations of a twin pair, as one struct taken from the columns of one side of the join of step 4: its relation type,
-     * its direction, its two node URNs in the order of the canonical relation ID, their names as the input gives them, and their normalized names.
-     * The struct leaves out the canonical relation ID and `sources`. The twinPair holds the two IDs in its own columns, the forward-flow relation is
-     * always a forward-only canonical relation, and the flag `nonIdenticalTwinsAlsoWithinForwardFlow` says whether the backfill twin also has
-     * forward-flow relation occurrences.
+     * One of the two canonical relations of a twin pair, as one struct taken from the columns of one side of the join of step 4: its canonical
+     * relation ID, its relation type, its direction, its two node URNs in the order of the canonical relation ID, their names as the input gives
+     * them, and its `sources`. The struct has the fields of [[DataTypes.CanonicalRelation]]. It leaves out the name key of step 3, which holds the
+     * normalized names, and step 5 computes again, from the names, the normalized names that it needs.
      */
     def twinFrom(alias: String): Column =
         struct(
+          col(s"$alias.canonicalId").as("canonicalId"),
           col(s"$alias.relationship_type").as("relationship_type"),
           col(s"$alias.direction").as("direction"),
           col(s"$alias.node1_urn").as("node1_urn"),
           col(s"$alias.node1_name").as("node1_name"),
-          col(s"$alias.node1NormalizedName").as("node1NormalizedName"),
           col(s"$alias.node2_urn").as("node2_urn"),
           col(s"$alias.node2_name").as("node2_name"),
-          col(s"$alias.node2NormalizedName").as("node2NormalizedName")
+          col(s"$alias.sources").as("sources")
         )
 
     /**
      * ==Step 4: the non-identical twin pairs==
      *
-     * Step 4 compares each forward-only canonical relation, whose relation occurrences all come from the forward flow, with every canonical relation
-     * that has at least one backfill relation occurrence. These include the identical twins, which are the canonical relations with relation
-     * occurrences from both pipelines. Each match on the name key is a twin pair: the forward-only canonical relation is the forward-flow relation,
-     * and the matched canonical relation is its backfill twin. The two canonical relation IDs of a twin pair always differ, because the forward-flow
-     * relation has no backfill relation occurrence and its backfill twin has at least one. So step 4 does not compare the IDs.
+     * Step 4 compares each forward-only canonical relation, which is supported only by forward-flow relation occurrences, with every canonical
+     * relation that is supported by at least one backfill relation occurrence. These include the identical twins, which are the canonical relations
+     * supported by relation occurrences from both pipelines. Each match on the name key is a twin pair: the forward-only canonical relation is the
+     * forward-flow relation, and the matched canonical relation is its backfill twin. The two canonical relation IDs of a twin pair always differ,
+     * because no backfill relation occurrence supports the forward-flow relation, and at least one supports its backfill twin. So step 4 does not
+     * compare the IDs.
      *
-     * Step 4 relies on two earlier results: the `sources` of step 2, which say which pipelines have relation occurrences of each canonical relation,
-     * and the name key of step 3, which step 4 computes first.
+     * Step 4 relies on two earlier results: the `sources` of step 2, which say which pipelines support each canonical relation, and the name key of
+     * step 3, which step 4 computes first.
      *
      * The backfill side keeps the identical twins, because the question is where the backfill put the relation. In the luteolin example, the forward
      * flow states that luteolin regulates Inflammation with the luteolin node `Concept_700527820` as the regulator. The backfill states it with the
      * other luteolin node, `Concept_86446482`, in an identical twin. Without identical twins on the backfill side, this twin pair would be lost. Step
-     * 4 keeps it, and its `nonIdenticalTwinsAlsoWithinForwardFlow` is true, because its backfill twin also has forward-flow relation occurrences.
+     * 4 keeps it, and its `nonIdenticalTwinsAlsoWithinForwardFlow` is true, because its backfill twin is also supported by forward-flow relation
+     * occurrences.
      *
-     * The columns `forwardTwin` and `backfillTwin` hold the forward-flow relation and its backfill twin, each built by [[twinFrom]]. The number of
+     * The columns `forwardTwin` and `backfillTwin` hold the forward-flow relation and its backfill twin, each built by [[twinFrom]]. The flag
+     * `nonIdenticalTwinsAlsoWithinForwardFlow` says whether the backfill twin is also supported by forward-flow relation occurrences. The number of
      * distinct `forwardCanonicalId` values is the number of forward-only canonical relations with at least one match among the canonical relations
-     * that have a backfill relation occurrence.
+     * supported by a backfill relation occurrence.
      *
-     * Columns: forwardCanonicalId, backfillCanonicalId, nonIdenticalTwinsAlsoWithinForwardFlow, forwardTwin, backfillTwin.
+     * Columns: forwardCanonicalId, backfillCanonicalId, nonIdenticalTwinsAlsoWithinForwardFlow, forwardTwin, backfillTwin. One row has the fields of
+     * [[DataTypes.TwinPairRecord]].
      */
-    def computeNonIdenticalTwinPairs(canonicalRelationsDS: Dataset[CanonicalRelation]): DataFrame =
+    def computeNonIdenticalTwinPairs(canonicalRelationsDS: Dataset[CanonicalRelation]): Dataset[TwinPairRecord] =
         val canonicalRelationsWithNameKey = canonicalRelationsDS.withNameKey
 
         val forwardOnlyCanonicalRelations =
@@ -197,7 +195,7 @@ object DataOps:
               array_contains(col("backfill.sources"), ForwardFlowSource).as("nonIdenticalTwinsAlsoWithinForwardFlow"),
               twinFrom("forward").as("forwardTwin"),
               twinFrom("backfill").as("backfillTwin")
-            )
+            ).enforceAs[TwinPairRecord](to_json(struct(col("forwardCanonicalId"), col("backfillCanonicalId"))))
 
     /**
      * One name-matched node pair, as the struct that step 5 stores: the role of both nodes, the node URN of the forward-flow node, the node URN of
@@ -237,14 +235,18 @@ object DataOps:
      *      with the regulator and the target swapped. For example, one EGFR node regulates another in the forward-flow relation and is regulated by
      *      it in the backfill twin.
      *
+     * Step 5 computes the normalized names of both forward-flow nodes and of backfill node 1 from their names in `forwardTwin` and `backfillTwin`. It
+     * uses [[normalizedName]], the same function that step 3 uses to build the name key, so guarantee 2 holds for these names.
+     *
      * Step 5 uses these names:
      *
      *   - A name-matched node pair is one forward-flow node and one backfill node whose normalized names are the same. Step 5 stores it as the struct
      *     `{role, forwardNodeUri, backfillNodeUri, matchedNodeName}`.
      *   - An identical node pair is a name-matched node pair whose forward-flow node and backfill node have the same node URN.
      *   - A homonymous node pair is a name-matched node pair whose two nodes have different node URNs.
-     *   - A name-matched node pair tuple is one possible answer to which forward-flow node goes with which backfill node, as step 5 stores it. It
-     *     holds two name-matched node pairs, the one of forward-flow node 1 first and the one of forward-flow node 2 second.
+     *   - A name-matched node pair tuple is a pairing of the two nodes of the forward-flow relation with the two nodes of its backfill twin, in which
+     *     each forward-flow node goes with a backfill node of the same normalized name. It holds two name-matched node pairs, the one of forward-flow
+     *     node 1 first and the one of forward-flow node 2 second.
      *   - A twin pair is resolved when step 5 can decide which forward-flow node goes with which backfill node, and unresolved when it cannot. The
      *     result holds one tuple for a resolved twin pair, and the two possible answers for an unresolved one.
      *
@@ -317,9 +319,9 @@ object DataOps:
         val forwardNode2Urn             = col("forwardTwin.node2_urn")
         val backfillNode1Urn            = col("backfillTwin.node1_urn")
         val backfillNode2Urn            = col("backfillTwin.node2_urn")
-        val forwardNode1NormalizedName  = col("forwardTwin.node1NormalizedName")
-        val forwardNode2NormalizedName  = col("forwardTwin.node2NormalizedName")
-        val backfillNode1NormalizedName = col("backfillTwin.node1NormalizedName")
+        val forwardNode1NormalizedName  = normalizedName(col("forwardTwin.node1_name"))
+        val forwardNode2NormalizedName  = normalizedName(col("forwardTwin.node2_name"))
+        val backfillNode1NormalizedName = normalizedName(col("backfillTwin.node1_name"))
 
         val directed                        = col("forwardTwin.direction") =!= Undirected
         // Both relations have the same name key (guarantee 2). So when the two forward-flow names differ, the two backfill names differ too, and
@@ -358,8 +360,12 @@ object DataOps:
      *
      * Columns: forwardCanonicalId, backfillCanonicalId, nonIdenticalTwinsAlsoWithinForwardFlow, forwardTwin, backfillTwin, nameMatchedNodePairTuples.
      */
-    def computeTwinPairsWithNameMatchedNodePairTuples(nonIdenticalTwinPairsDF: DataFrame): DataFrame =
-        nonIdenticalTwinPairsDF.withColumn("nameMatchedNodePairTuples", nameMatchedNodePairTuples)
+    def computeTwinPairsWithNameMatchedNodePairTuples(
+        nonIdenticalTwinPairsDS: Dataset[TwinPairRecord]
+    ): Dataset[TwinPairWithNameMatchedNodePairTuples] =
+        nonIdenticalTwinPairsDS
+            .withColumn("nameMatchedNodePairTuples", nameMatchedNodePairTuples)
+            .enforceAs[TwinPairWithNameMatchedNodePairTuples](to_json(struct(col("forwardCanonicalId"), col("backfillCanonicalId"))))
 
     /**
      * ==Step 5: the homonymous node pairs of each resolved twin pair, the detail table==
@@ -371,13 +377,15 @@ object DataOps:
      * in which both relations hold a node twice gives the same homonymous node pair twice.
      *
      * Columns: forwardNodeUri, backfillNodeUri, matchedNodeName, role, forwardCanonicalId, backfillCanonicalId,
-     * nonIdenticalTwinsAlsoWithinForwardFlow.
+     * nonIdenticalTwinsAlsoWithinForwardFlow. One row has the fields of [[DataTypes.HomonymousNodePairWithTwinPair]].
      */
-    def computeHomonymousNodePairsPerTwinPair(twinPairsWithNameMatchedNodePairTuplesDF: DataFrame): DataFrame =
+    def computeHomonymousNodePairsPerTwinPair(
+        twinPairsWithNameMatchedNodePairTuplesDS: Dataset[TwinPairWithNameMatchedNodePairTuples]
+    ): Dataset[HomonymousNodePairWithTwinPair] =
         val resolvedTwinPair = size(col("nameMatchedNodePairTuples")) === 1 // <-- an unresolved twin pair keeps its two possible answers
         val nodeUrnsDiffer   = col("nameMatchedNodePair.forwardNodeUri") =!= col("nameMatchedNodePair.backfillNodeUri")
 
-        twinPairsWithNameMatchedNodePairTuplesDF
+        twinPairsWithNameMatchedNodePairTuplesDS
             .filter(resolvedTwinPair)
             .select(
               explode(col("nameMatchedNodePairTuples").getItem(0)).as("nameMatchedNodePair"), // <-- the one tuple of a resolved twin pair
@@ -394,7 +402,7 @@ object DataOps:
               col("forwardCanonicalId"),
               col("backfillCanonicalId"),
               col("nonIdenticalTwinsAlsoWithinForwardFlow")
-            )
+            ).enforceAs[HomonymousNodePairWithTwinPair](to_json(struct(col("forwardCanonicalId"), col("backfillCanonicalId"))))
 
     /**
      * ==Step 5: each homonymous node pair once, with its number of twin pairs, the global table==
@@ -407,10 +415,13 @@ object DataOps:
      * Columns: forwardNodeUri, backfillNodeUri, matchedNodeName, nonIdenticalTwinPairCount. One row has the fields of
      * [[DataTypes.HomonymousNodePairWithTwinCount]].
      */
-    def computeTwinPairCountPerHomonymousNodePair(homonymousNodePairsPerTwinPairDF: DataFrame): DataFrame =
-        homonymousNodePairsPerTwinPairDF
+    def computeTwinPairCountPerHomonymousNodePair(
+        homonymousNodePairsPerTwinPairDS: Dataset[HomonymousNodePairWithTwinPair]
+    ): Dataset[HomonymousNodePairWithTwinCount] =
+        homonymousNodePairsPerTwinPairDS
             .groupBy(col("forwardNodeUri"), col("backfillNodeUri"), col("matchedNodeName"))
             .agg(countDistinct(col("forwardCanonicalId"), col("backfillCanonicalId")).as("nonIdenticalTwinPairCount"))
+            .enforceAs[HomonymousNodePairWithTwinCount](to_json(struct(col("forwardNodeUri"), col("backfillNodeUri"))))
 
     /**
      * ==Step 5: the unresolved twin pairs==
@@ -421,9 +432,9 @@ object DataOps:
      *
      * Columns: forwardCanonicalId, backfillCanonicalId, nameMatchedNodePairTuples.
      */
-    def computeTwinPairsWithMultipleNameMatchedNodePairTuples(twinPairsWithNameMatchedNodePairTuplesDF: DataFrame): DataFrame =
+    def computeTwinPairsWithMultipleNameMatchedNodePairTuples(twinPairsWithNameMatchedNodePairTuplesDS: Dataset[TwinPairWithNameMatchedNodePairTuples]): DataFrame =
         val unresolvedTwinPair = size(col("nameMatchedNodePairTuples")) === 2 // <-- rule C3 keeps both possible answers
 
-        twinPairsWithNameMatchedNodePairTuplesDF
+        twinPairsWithNameMatchedNodePairTuplesDS
             .filter(unresolvedTwinPair)
             .select(col("forwardCanonicalId"), col("backfillCanonicalId"), col("nameMatchedNodePairTuples"))

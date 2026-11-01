@@ -5,6 +5,7 @@ import biomed3471.claude.DataTypes.*
 import biomed3471.claude.DataOps.*
 import io.delta.implicits.*
 import org.apache.spark.sql.functions.*
+import io.github.pashashiz.spark_encoders.TypedEncoder.*
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 import scribe.*
 
@@ -23,7 +24,7 @@ import scala.util.chaining.scalaUtilChainingOps
  *   - A relation occurrence is one occurrence of a relation in one document, produced by one pipeline: the forward flow (BCE, Biomed Content
  *     Enrichment) or the backfill (MedScan).
  *   - A canonical relation is one relation type between two nodes in their roles. Many relation occurrences belong to one canonical relation. A
- *     forward-only canonical relation has relation occurrences from the forward flow only.
+ *     forward-only canonical relation is supported only by relation occurrences from the forward flow.
  *   - The graph's domain model gives each relation type one direction, directed or undirected. Section 2.2 of BioMed Data Identifier Schemes then
  *     builds the canonical relation ID from the relation type, the roles and the two node TERMite IDs. In a directed relation, such as Regulation,
  *     node 1 is the regulator and node 2 is the target. In an undirected relation, such as Binding, both nodes are partners, and the ID lists the
@@ -36,7 +37,7 @@ import scala.util.chaining.scalaUtilChainingOps
  *   - The name key of a canonical relation is its relation type and the normalized names of its two nodes.
  *   - Two canonical relations are non-identical twins when they have the same name key but different canonical relation IDs. A twin pair is one pair
  *     of non-identical twins that the twin search finds. It holds a forward-flow relation, which is a forward-only canonical relation, and a backfill
- *     twin, which is a canonical relation with at least one backfill relation occurrence.
+ *     twin, which is a canonical relation supported by at least one backfill relation occurrence.
  *   - In step 5, each node of the forward-flow relation goes with a node of the backfill twin that has the same normalized name, by rules A to C of
  *     [[DataOps.nameMatchedNodePairTuples]]. A homonymous node pair is a forward-flow node and the backfill node that goes with it, when the two have
  *     different node URNs. A twin pair is resolved when the rules decide which forward-flow node goes with which backfill node, and unresolved when
@@ -49,8 +50,8 @@ import scala.util.chaining.scalaUtilChainingOps
  *   - Step 1 builds the canonical relation ID of each relation occurrence.
  *   - Step 2 combines the relation occurrences of each canonical relation into one row. These rows are saved in `canonicalRelations`.
  *   - Step 3 adds a name key to each canonical relation.
- *   - Step 4 matches each forward-only canonical relation with every canonical relation that has a backfill relation occurrence and the same name
- *     key. Each match is a twin pair, and the twin pairs are saved in `nonIdenticalTwinPairs`.
+ *   - Step 4 matches each forward-only canonical relation with every canonical relation that is supported by a backfill relation occurrence and has
+ *     the same name key. Each match is a twin pair, and the twin pairs are saved in `nonIdenticalTwinPairs`.
  *   - Step 5 decides, in each twin pair, which forward-flow node goes with which backfill node. Its results are saved in four tables:
  *     - `twinPairsWithNameMatchedNodePairTuples` holds every twin pair with the result of rules A to C. The result is one answer for a resolved twin
  *       pair, and the two possible answers for an unresolved one.
@@ -130,36 +131,40 @@ object TwinSearchApp:
             .enforceAs[CanonicalRelation]($"canonicalId")
 
         // Steps 3 and 4
-        val nonIdenticalTwinPairsDF = canonicalRelationsDS
+        val nonIdenticalTwinPairsDS = canonicalRelationsDS
             .pipe { computeNonIdenticalTwinPairs }
-            .pipe { df => writeAndReadBackDeltaTable(df, nonIdenticalTwinPairsPath) }
+            .pipe { ds => writeAndReadBackDeltaTable(ds.toDF(), nonIdenticalTwinPairsPath) }
+            .enforceAs[TwinPairRecord](to_json(struct($"forwardCanonicalId", $"backfillCanonicalId")))
 
         // Step 5
-        val twinPairsWithNameMatchedNodePairTuplesDF = nonIdenticalTwinPairsDF
+        val twinPairsWithNameMatchedNodePairTuplesDS = nonIdenticalTwinPairsDS
             .pipe { computeTwinPairsWithNameMatchedNodePairTuples }
-            .pipe { df => writeAndReadBackDeltaTable(df, twinPairsWithNameMatchedNodePairTuplesPath) }
+            .pipe { ds => writeAndReadBackDeltaTable(ds.toDF(), twinPairsWithNameMatchedNodePairTuplesPath) }
+            .enforceAs[TwinPairWithNameMatchedNodePairTuples](to_json(struct($"forwardCanonicalId", $"backfillCanonicalId")))
 
-        val homonymousNodePairsPerTwinPairDF = twinPairsWithNameMatchedNodePairTuplesDF
+        val homonymousNodePairsPerTwinPairDS = twinPairsWithNameMatchedNodePairTuplesDS
             .pipe { computeHomonymousNodePairsPerTwinPair }
-            .pipe { df => writeAndReadBackDeltaTable(df, homonymousNodePairsPerTwinPairPath) }
+            .pipe { ds => writeAndReadBackDeltaTable(ds.toDF(), homonymousNodePairsPerTwinPairPath) }
+            .enforceAs[HomonymousNodePairWithTwinPair](to_json(struct($"forwardCanonicalId", $"backfillCanonicalId")))
 
-        val twinPairCountPerHomonymousNodePairDF = homonymousNodePairsPerTwinPairDF
+        val twinPairCountPerHomonymousNodePairDS = homonymousNodePairsPerTwinPairDS
             .pipe { computeTwinPairCountPerHomonymousNodePair }
-            .pipe { df => writeAndReadBackDeltaTable(df, twinPairCountPerHomonymousNodePairPath) }
+            .pipe { ds => writeAndReadBackDeltaTable(ds.toDF(), twinPairCountPerHomonymousNodePairPath) }
+            .enforceAs[HomonymousNodePairWithTwinCount](to_json(struct($"forwardNodeUri", $"backfillNodeUri")))
 
-        val twinPairsWithMultipleNameMatchedNodePairTuplesDF = twinPairsWithNameMatchedNodePairTuplesDF
+        val twinPairsWithMultipleNameMatchedNodePairTuplesDF = twinPairsWithNameMatchedNodePairTuplesDS
             .pipe { computeTwinPairsWithMultipleNameMatchedNodePairTuples }
             .pipe { df => writeAndReadBackDeltaTable(df, twinPairsWithMultipleNameMatchedNodePairTuplesPath) }
 
-        val forwardOnlyCanonicalRelationTwinCount = nonIdenticalTwinPairsDF
+        val forwardOnlyCanonicalRelationTwinCount = nonIdenticalTwinPairsDS
             .select($"forwardCanonicalId")
             .distinct()
             .count()
 
-        println(s"twinPairCount=${nonIdenticalTwinPairsDF.count()}")
+        println(s"twinPairCount=${nonIdenticalTwinPairsDS.count()}")
         println(s"forwardOnlyCanonicalRelationTwinCount=$forwardOnlyCanonicalRelationTwinCount")
         println(s"unresolvedTwinPairCount=${twinPairsWithMultipleNameMatchedNodePairTuplesDF.count()}")
-        println(s"homonymousNodePairsPerTwinPairCount=${homonymousNodePairsPerTwinPairDF.count()}")
-        println(s"homonymousNodePairCount=${twinPairCountPerHomonymousNodePairDF.count()}")
+        println(s"homonymousNodePairsPerTwinPairCount=${homonymousNodePairsPerTwinPairDS.count()}")
+        println(s"homonymousNodePairCount=${twinPairCountPerHomonymousNodePairDS.count()}")
 
         spark.stop()
