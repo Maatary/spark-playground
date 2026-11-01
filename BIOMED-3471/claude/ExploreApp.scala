@@ -52,7 +52,7 @@ object ExploreApp:
 //            .filter($"direction" === "undirected")
 //            .show(10, truncate = false)
 
-//        val canonicalsPath = "s3://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-31/canonicalRelations"
+//        val canonicalsPath = "s3://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-11-01/canonicalRelations"
 //
 //        val canonicals = spark
 //            .read
@@ -70,7 +70,7 @@ object ExploreApp:
 //        val nonIdenticalTwinPairs = spark
 //            .read
 //            .format("delta")
-//            .load("s3://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-31/nonIdenticalTwinPairs")
+//            .load("s3://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-11-01/nonIdenticalTwinPairs")
 //            .tap {_.printSchema()}
 //            .tap { _.show(10, truncate = false) }
 //
@@ -103,7 +103,7 @@ object ExploreApp:
         val twinPairsWithNameMatchedNodePairTuples = spark
             .read
             .format("delta")
-            .load("s3a://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-31/twinPairsWithNameMatchedNodePairTuples")
+            .load("s3a://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-11-01/twinPairsWithNameMatchedNodePairTuples")
             .tap { _.printSchema() }
             .tap { _.show(10, truncate = false) }
             .tap { df => println(s"Twin pairs with name-matched node pair tuples count: ${df.count()}") }
@@ -112,7 +112,7 @@ object ExploreApp:
         val homonymousNodePairsPerTwinPair = spark
             .read
             .format("delta")
-            .load("s3a://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-31/homonymousNodePairsPerTwinPair")
+            .load("s3a://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-11-01/homonymousNodePairsPerTwinPair")
             .tap { _.printSchema() }
             .tap { _.show(10, truncate = false) }
             .tap { df => println(s"Homonymous node pairs per twin pair count: ${df.count()}") }
@@ -125,7 +125,7 @@ object ExploreApp:
 //        val twinPairCountPerHomonymousNodePair = spark
 //            .read
 //            .format("delta")
-//            .load("s3a://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-31/twinPairCountPerHomonymousNodePair")
+//            .load("s3a://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-11-01/twinPairCountPerHomonymousNodePair")
 //            .tap {_.printSchema()}
 //            .tap { _.show(10, truncate = false) }
 

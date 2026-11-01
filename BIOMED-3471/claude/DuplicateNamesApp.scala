@@ -27,7 +27,7 @@ import scala.util.chaining.scalaUtilChainingOps
  * several nodes in canonicalRelations, no twin pair   the name is a duplicate in the input, but it creates no twin pair
  * }}}
  *
- * DuplicateNamesApp reads canonicalRelations and twinPairCountPerHomonymousNodePair of the twin search run 2026-10-31, and
+ * DuplicateNamesApp reads canonicalRelations and twinPairCountPerHomonymousNodePair of the twin search run 2026-11-01, and
  * writes one row for each name of the list in duplicateNamesWithGroup, in the same run folder. At the end, it prints the
  * number of names in each group and in total.
  *
@@ -76,7 +76,7 @@ object DuplicateNamesApp:
         import io.github.pashashiz.spark_encoders.TypedEncoder.given
 
         val duplicateNodeNamesPath                 = "s3a://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/inputs/duplicates.csv"
-        val runPath                                = "s3a://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-10-31"
+        val runPath                                = "s3a://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/2026-11-01"
         val canonicalRelationsPath                 = s"$runPath/canonicalRelations"
         val twinPairCountPerHomonymousNodePairPath = s"$runPath/twinPairCountPerHomonymousNodePair"
         val duplicateNamesWithGroupPath            = s"$runPath/duplicateNamesWithGroup"
