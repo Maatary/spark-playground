@@ -54,9 +54,9 @@ object TwinSearchApp:
      * then identifies the homonymous node pairs to investigate. The backfill search
      * includes canonical relations shared with the forward flow.
      *
-     * Declares the input, run and six table paths directly below. See the
+     * Declares the input, run and five table paths directly below. See the
      * <a href="README.md#direct-domain-rules">direct domain rules</a> for matching
-     * and the <a href="README.md#six-saved-delta-tables">six-table overview</a>
+     * and the <a href="README.md#five-saved-delta-tables">five-table overview</a>
      * for each output's contents and purpose.
      *
      * Reserves the run path, then writes and reads back each Delta table in order.
@@ -73,12 +73,11 @@ object TwinSearchApp:
         val relationOccurrencePath = "s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/wytze-relation-occurrences/"
         val runPath                = s"s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/$runId"
 
-        val canonicalRelationsPath                             = s"$runPath/canonicalRelations"
-        val nonIdenticalTwinPairsPath                          = s"$runPath/nonIdenticalTwinPairs"
-        val twinPairsWithNameMatchedNodePairTuplesPath         = s"$runPath/twinPairsWithNameMatchedNodePairTuples"
-        val homonymousNodePairsPerTwinPairPath                 = s"$runPath/homonymousNodePairsPerTwinPair"
-        val twinPairCountPerHomonymousNodePairPath             = s"$runPath/twinPairCountPerHomonymousNodePair"
-        val twinPairsWithMultipleNameMatchedNodePairTuplesPath = s"$runPath/twinPairsWithMultipleNameMatchedNodePairTuples"
+        val canonicalRelationsPath                 = s"$runPath/canonicalRelations"
+        val nonIdenticalTwinPairsPath              = s"$runPath/nonIdenticalTwinPairs"
+        val twinPairsWithNameMatchedNodePairsPath  = s"$runPath/twinPairsWithNameMatchedNodePairs"
+        val homonymousNodePairsPerTwinPairPath     = s"$runPath/homonymousNodePairsPerTwinPair"
+        val twinPairCountPerHomonymousNodePairPath = s"$runPath/twinPairCountPerHomonymousNodePair"
 
         val spark = makeSparkSession
         try
@@ -93,21 +92,17 @@ object TwinSearchApp:
                 .pipe(findNonIdenticalTwinPairs)
                 .pipe(data => writeAndReadBackDeltaTable(data, nonIdenticalTwinPairsPath))
 
-            val twinPairsWithNameMatchedNodePairTuples = nonIdenticalTwinPairs
-                .withNameMatchedNodePairTuples
-                .pipe(data => writeAndReadBackDeltaTable(data, twinPairsWithNameMatchedNodePairTuplesPath))
+            val twinPairsWithNameMatchedNodePairs = nonIdenticalTwinPairs
+                .withNameMatchedNodePairs
+                .pipe(data => writeAndReadBackDeltaTable(data, twinPairsWithNameMatchedNodePairsPath))
 
-            val homonymousNodePairsPerTwinPair = twinPairsWithNameMatchedNodePairTuples
+            val homonymousNodePairsPerTwinPair = twinPairsWithNameMatchedNodePairs
                 .selectHomonymousNodePairsPerTwinPair
                 .pipe(data => writeAndReadBackDeltaTable(data, homonymousNodePairsPerTwinPairPath))
 
             homonymousNodePairsPerTwinPair
                 .countTwinPairsPerHomonymousNodePair
                 .pipe(data => writeAndReadBackDeltaTable(data, twinPairCountPerHomonymousNodePairPath))
-
-            twinPairsWithNameMatchedNodePairTuples
-                .selectTwinPairsWithMultipleNameMatchedNodePairTuples
-                .pipe(data => writeAndReadBackDeltaTable(data, twinPairsWithMultipleNameMatchedNodePairTuplesPath))
 
         finally spark.stop()
 

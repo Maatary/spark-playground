@@ -20,20 +20,17 @@ private object StepFiveCheckData:
         forwardTwin: Row,
         backfillTwin: Row,
         shared: Boolean,
-        expectedResults: Vector[Vector[Row]]
+        expectedPairs: Vector[Row]
     )
 
     final case class CheckedOutputs(
         full: Vector[Row],
         detail: Vector[Row],
-        global: Vector[Row],
-        unresolved: Vector[Row]
+        global: Vector[Row]
     )
 
     /** A twin pair's canonical relation IDs, ordered as (forwardCanonicalId, backfillCanonicalId). */
     type TwinId = (String, String)
-    /** Counts tuples by their node-pair contents, with repeated node-pair records counted inside each tuple. */
-    type ResultMultiset = Map[Map[Row, Int], Int]
 
     val MaximumCheckedRows = 10000
 
@@ -70,8 +67,7 @@ private object StepFiveCheckData:
         StructField("matchedNodeName", StringType)
     ))
 
-    val ResultType = ArrayType(ArrayType(NodePairSchema))
-    val FullSchema: StructType = TwinSchema.add("nameMatchedNodePairTuples", ResultType)
+    val FullSchema: StructType = TwinSchema.add("nameMatchedNodePairs", ArrayType(NodePairSchema))
 
     val DetailSchema = StructType(Vector(
         StructField("forwardNodeUri", StringType),
@@ -88,12 +84,6 @@ private object StepFiveCheckData:
         StructField("backfillNodeUri", StringType),
         StructField("matchedNodeName", StringType),
         StructField("nonIdenticalTwinPairCount", LongType)
-    ))
-
-    val UnresolvedSchema = StructType(Vector(
-        StructField("forwardCanonicalId", StringType),
-        StructField("backfillCanonicalId", StringType),
-        StructField("nameMatchedNodePairTuples", ResultType)
     ))
 
     val OccurrenceSchema = StructType(RelationSchema.fields.toVector
@@ -172,22 +162,22 @@ private object StepFiveCheckOps:
         Row(role, forward.uri, backfill.uri, forward.name.trim.toLowerCase(Locale.ROOT))
 
     /**
-     * Bundles one twin pair's input with independently specified expected tuples.
+     * Bundles one twin pair's input with independently specified expected node pairs.
      *
      * @param label readable case name used in failures
      * @param relationType exported relation type
      * @param forward first and second forward participants
      * @param backfill first and second backfill participants
-     * @param expected name-matched node pair tuples, including repeated node pairs
+     * @param expected name-matched node pairs in stored order, including repeated node pairs
      * @param shared whether the backfill relation also occurs in forward flow
-     * @return one fixture; no matching or resolution algorithm runs here
+     * @return one fixture; no matching algorithm runs here
      */
     private def fixture(
         label: String,
         relationType: String,
         forward: (Node, Node),
         backfill: (Node, Node),
-        expected: Vector[Vector[Row]],
+        expected: Vector[Row],
         shared: Boolean = false
     ): Fixture =
         Fixture(
@@ -201,31 +191,31 @@ private object StepFiveCheckOps:
     /**
      * Reproduces the three real twin pairs in the <a href="README.md#real-examples">README's four detailed examples</a>.
      *
-     * @return twin-pair fixtures with expected tuples, their canonical relation IDs and their original full node URNs
+     * @return twin-pair fixtures with expected node pairs, their canonical relation IDs and their original full node URNs
      */
     private def realFixtures: Vector[Fixture] = Vector(
         fixture("luteolin / inflammation", "biomed:Regulation",
             (LuteolinForward, Inflammation), (LuteolinBackfill, Inflammation),
-            Vector(Vector(pair("regulator", LuteolinForward, LuteolinBackfill),
-                pair("target", Inflammation, Inflammation))), shared = true),
+            Vector(pair("regulator", LuteolinForward, LuteolinBackfill),
+                pair("target", Inflammation, Inflammation)), shared = true),
         fixture("luteolin / multiple sclerosis", "biomed:Regulation",
             (LuteolinForward, MultipleSclerosis), (LuteolinBackfill, MultipleSclerosis),
-            Vector(Vector(pair("regulator", LuteolinForward, LuteolinBackfill),
-                pair("target", MultipleSclerosis, MultipleSclerosis)))),
+            Vector(pair("regulator", LuteolinForward, LuteolinBackfill),
+                pair("target", MultipleSclerosis, MultipleSclerosis))),
         fixture("dorzolamide / carbonic anhydrase", "biomed:DirectRegulation",
             (DorzolamideForward, CarbonicAnhydraseForward), (DorzolamideBackfill, CarbonicAnhydraseBackfill),
-            Vector(Vector(pair("regulator", DorzolamideForward, DorzolamideBackfill),
-                pair("target", CarbonicAnhydraseForward, CarbonicAnhydraseBackfill))))
+            Vector(pair("regulator", DorzolamideForward, DorzolamideBackfill),
+                pair("target", CarbonicAnhydraseForward, CarbonicAnhydraseBackfill)))
     )
 
     /**
      * Specifies directed, Binding and repetition cases absent from the baseline.
      *
-     * Expected name-matched node pair tuples are written out per case. The three
+     * Expected name-matched node pairs are written out per case. The three
      * count cases intentionally share canonical relation IDs to distinguish counting twin pairs by (forwardCanonicalId, backfillCanonicalId)
      * from counting detailed entries or either canonical relation ID alone.
      *
-     * @return isolated valid twin pairs and their one or two expected tuples
+     * @return isolated valid twin pairs and their two or four expected node pairs
      */
     private def syntheticFixtures: Vector[Fixture] =
         val directedFirst = fixtureNode("Directed", "1", " EGFR ")
@@ -255,10 +245,10 @@ private object StepFiveCheckOps:
         val countSecond = fixtureNode("Count", "2", "EGFR")
         val countThird = fixtureNode("Count", "3", "EGFR")
         val countFourth = fixtureNode("Count", "4", "EGFR")
-        val ambiguousFirst = fixtureNode("Ambiguous", "1", " EGFR ")
-        val ambiguousSecond = fixtureNode("Ambiguous", "2", "egfr  ")
-        val ambiguousThird = fixtureNode("Ambiguous", "3", "EGFR")
-        val ambiguousFourth = fixtureNode("Ambiguous", "4", "EGFR")
+        val fourPairFirst = fixtureNode("FourPairs", "1", " EGFR ")
+        val fourPairSecond = fixtureNode("FourPairs", "2", "egfr  ")
+        val fourPairThird = fixtureNode("FourPairs", "3", "EGFR")
+        val fourPairFourth = fixtureNode("FourPairs", "4", "EGFR")
         val lowercaseFirst = fixtureNode("Lowercase", "1", "EGFR")
         val lowercaseSecond = fixtureNode("Lowercase", "2", "egfr")
         val lowercaseThird = fixtureNode("Lowercase", "3", "EgFr")
@@ -275,68 +265,68 @@ private object StepFiveCheckOps:
         Vector(
             fixture("directed shared URI in opposite roles", "biomed:Regulation",
                 (directedFirst, directedShared), (directedShared, directedLast),
-                Vector(Vector(pair("regulator", directedFirst, directedShared), pair("target", directedShared, directedLast)))),
+                Vector(pair("regulator", directedFirst, directedShared), pair("target", directedShared, directedLast))),
             fixture("directed repetition on both sides", "biomed:Regulation",
                 (directedFirst, directedFirst), (directedLast, directedLast),
-                Vector(Vector(pair("regulator", directedFirst, directedLast), pair("target", directedFirst, directedLast)))),
+                Vector(pair("regulator", directedFirst, directedLast), pair("target", directedFirst, directedLast))),
             fixture("Binding different names, straight, one homonymous pair", "biomed:Binding",
                 (insulinForward, receptor), (insulinBackfill, receptor),
-                Vector(Vector(pair("partner", insulinForward, insulinBackfill), pair("partner", receptor, receptor)))),
+                Vector(pair("partner", insulinForward, insulinBackfill), pair("partner", receptor, receptor))),
             fixture("Binding different names, crossed, two homonymous pairs", "biomed:Binding",
                 (crossedInsulinForward, crossedReceptorForward), (crossedReceptorBackfill, crossedInsulinBackfill),
-                Vector(Vector(pair("partner", crossedInsulinForward, crossedInsulinBackfill),
-                    pair("partner", crossedReceptorForward, crossedReceptorBackfill)))),
+                Vector(pair("partner", crossedInsulinForward, crossedInsulinBackfill),
+                    pair("partner", crossedReceptorForward, crossedReceptorBackfill))),
             fixture("Binding shared URI wins", "biomed:Binding",
                 (sharedFirst, sharedNode), (sharedNode, sharedLast),
-                Vector(Vector(pair("partner", sharedFirst, sharedLast), pair("partner", sharedNode, sharedNode)))),
+                Vector(pair("partner", sharedFirst, sharedLast), pair("partner", sharedNode, sharedNode))),
             fixture("Binding shared URI wins at the same position", "biomed:Binding",
                 (sharedFirst, sharedNode), (sharedFirst, sharedLast),
-                Vector(Vector(pair("partner", sharedFirst, sharedFirst), pair("partner", sharedNode, sharedLast)))),
+                Vector(pair("partner", sharedFirst, sharedFirst), pair("partner", sharedNode, sharedLast))),
             fixture("Binding shared URI at forward first and backfill second", "biomed:Binding",
                 (sharedCrossedNode, sharedCrossedForward), (sharedCrossedBackfill, sharedCrossedNode),
-                Vector(Vector(pair("partner", sharedCrossedNode, sharedCrossedNode),
-                    pair("partner", sharedCrossedForward, sharedCrossedBackfill)))),
+                Vector(pair("partner", sharedCrossedNode, sharedCrossedNode),
+                    pair("partner", sharedCrossedForward, sharedCrossedBackfill))),
             fixture("Binding shared URI at both second positions", "biomed:Binding",
                 (sharedLastForward, sharedLastNode), (sharedLastBackfill, sharedLastNode),
-                Vector(Vector(pair("partner", sharedLastForward, sharedLastBackfill),
-                    pair("partner", sharedLastNode, sharedLastNode)))),
+                Vector(pair("partner", sharedLastForward, sharedLastBackfill),
+                    pair("partner", sharedLastNode, sharedLastNode))),
             fixture("Binding repeated shared URI", "biomed:Binding",
                 (repeatedShared, repeatedShared), (repeatedShared, repeatedOther),
-                Vector(Vector(pair("partner", repeatedShared, repeatedShared), pair("partner", repeatedShared, repeatedOther)))),
+                Vector(pair("partner", repeatedShared, repeatedShared), pair("partner", repeatedShared, repeatedOther))),
             fixture("Binding shared URI in a self-referencing backfill relation", "biomed:Binding",
                 (repeatedBackfillOther, repeatedBackfillShared), (repeatedBackfillShared, repeatedBackfillShared),
-                Vector(Vector(pair("partner", repeatedBackfillOther, repeatedBackfillShared),
-                    pair("partner", repeatedBackfillShared, repeatedBackfillShared)))),
+                Vector(pair("partner", repeatedBackfillOther, repeatedBackfillShared),
+                    pair("partner", repeatedBackfillShared, repeatedBackfillShared))),
             fixture("Binding repetition on both sides", "biomed:Binding",
                 (countFirst, countFirst), (countSecond, countSecond),
-                Vector(Vector(pair("partner", countFirst, countSecond), pair("partner", countFirst, countSecond))), shared = true),
+                Vector(pair("partner", countFirst, countSecond), pair("partner", countFirst, countSecond)), shared = true),
             fixture("Binding repetition on forward side", "biomed:Binding",
                 (countFirst, countFirst), (countSecond, countThird),
-                Vector(Vector(pair("partner", countFirst, countSecond), pair("partner", countFirst, countThird)))),
+                Vector(pair("partner", countFirst, countSecond), pair("partner", countFirst, countThird))),
             fixture("Binding repetition on backfill side", "biomed:Binding",
                 (countFirst, countFourth), (countSecond, countSecond),
-                Vector(Vector(pair("partner", countFirst, countSecond), pair("partner", countFourth, countSecond))), shared = true),
-            fixture("Binding two genuinely distinct results", "biomed:Binding",
-                (ambiguousFirst, ambiguousSecond), (ambiguousThird, ambiguousFourth),
+                Vector(pair("partner", countFirst, countSecond), pair("partner", countFourth, countSecond)), shared = true),
+            fixture("Binding four known homonymous pairs", "biomed:Binding",
+                (fourPairFirst, fourPairSecond), (fourPairThird, fourPairFourth),
                 Vector(
-                    Vector(pair("partner", ambiguousFirst, ambiguousThird), pair("partner", ambiguousSecond, ambiguousFourth)),
-                    Vector(pair("partner", ambiguousFirst, ambiguousFourth), pair("partner", ambiguousSecond, ambiguousThird))
+                    pair("partner", fourPairFirst, fourPairThird), pair("partner", fourPairSecond, fourPairFourth),
+                    pair("partner", fourPairFirst, fourPairFourth), pair("partner", fourPairSecond, fourPairThird)
                 )),
-            fixture("Binding names equal only after lowercase, two distinct results", "biomed:Binding",
+            fixture("Binding names equal only after lowercase, four known homonymous pairs", "biomed:Binding",
                 (lowercaseFirst, lowercaseSecond), (lowercaseThird, lowercaseFourth),
                 Vector(
-                    Vector(pair("partner", lowercaseFirst, lowercaseThird), pair("partner", lowercaseSecond, lowercaseFourth)),
-                    Vector(pair("partner", lowercaseFirst, lowercaseFourth), pair("partner", lowercaseSecond, lowercaseThird))
+                    pair("partner", lowercaseFirst, lowercaseThird), pair("partner", lowercaseSecond, lowercaseFourth),
+                    pair("partner", lowercaseFirst, lowercaseFourth), pair("partner", lowercaseSecond, lowercaseThird)
                 )),
             fixture("Binding same raw ID under different node types is not a shared node", "biomed:Binding",
                 (undirectedDisease, undirectedForward), (undirectedCell, undirectedBackfill),
                 Vector(
-                    Vector(pair("partner", undirectedDisease, undirectedCell), pair("partner", undirectedForward, undirectedBackfill)),
-                    Vector(pair("partner", undirectedDisease, undirectedBackfill), pair("partner", undirectedForward, undirectedCell))
+                    pair("partner", undirectedDisease, undirectedCell), pair("partner", undirectedForward, undirectedBackfill),
+                    pair("partner", undirectedDisease, undirectedBackfill), pair("partner", undirectedForward, undirectedCell)
                 )),
             fixture("same raw ID under different node types", "biomed:Regulation",
                 (processDisease, typeTargetForward), (processCell, typeTargetBackfill),
-                Vector(Vector(pair("regulator", processDisease, processCell), pair("target", typeTargetForward, typeTargetBackfill))))
+                Vector(pair("regulator", processDisease, processCell), pair("target", typeTargetForward, typeTargetBackfill)))
         )
 
     /**
@@ -394,85 +384,81 @@ private object StepFiveCheckOps:
         entries.groupMapReduce(identity)(_ => 1)(_ + _)
 
     /**
-     * Represents name-matched node pair tuples as counts, ignoring listing order while retaining repetitions.
-     *
-     * @param results one or two name-matched node pair tuples
-     * @return each tuple's node-pair counts and the number of times that tuple occurs
-     */
-    private def resultMultiset(results: Seq[Seq[Row]]): ResultMultiset =
-        multiset(results.map(multiset))
-
-    /**
      * Extracts the two canonical relation IDs that identify a twin pair.
      *
-     * @param row a collected row for a twin pair, including an unresolved twin pair
+     * @param row a collected row for a twin pair
      * @return (forwardCanonicalId, backfillCanonicalId), with the forward-flow canonical relation ID first
      */
     private def twinId(row: Row): TwinId =
         (row.getAs[String]("forwardCanonicalId"), row.getAs[String]("backfillCanonicalId"))
 
     /**
-     * Reads nameMatchedNodePairTuples without assuming Spark's Seq subtype.
+     * Reads nameMatchedNodePairs without assuming Spark's Seq subtype.
      *
-     * @param row a full or unresolved Step 5 result
-     * @return one or two tuples as immutable vectors, retaining repeated node-pair records
+     * @param row a full Step 5 result
+     * @return two or four node-pair records in stored order, retaining repeated records
      */
-    private def results(row: Row): Vector[Vector[Row]] =
-        row.getSeq[scala.collection.Seq[Row]](row.fieldIndex("nameMatchedNodePairTuples")).iterator.map(_.toVector).toVector
+    private def nodePairs(row: Row): Vector[Row] =
+        row.getSeq[Row](row.fieldIndex("nameMatchedNodePairs")).toVector
 
     /**
-     * Executes the four public Step 5 operations over a bounded input.
+     * Executes the three public Step 5 operations over a bounded input.
      *
      * @param input valid non-identical twin pairs, or an empty typed subset
      * @param label check group used in schema and size failures
-     * @return all four small outputs; no persistence or caching occurs
+     * @return all three small outputs; no persistence or caching occurs
      */
     private def evaluate(input: DataFrame, label: String): CheckedOutputs =
         checkSchema(s"$label input", input, TwinSchema)
-        val full = input.withNameMatchedNodePairTuples
+        val full = input.withNameMatchedNodePairs
         val detail = full.selectHomonymousNodePairsPerTwinPair
         val global = detail.countTwinPairsPerHomonymousNodePair
-        val unresolved = full.selectTwinPairsWithMultipleNameMatchedNodePairTuples
-        checkedOutputs(full, detail, global, unresolved, label)
+        checkedOutputs(full, detail, global, label)
 
     /**
      * Checks schemas, collects bounded outputs and verifies their stored ordering.
      *
-     * Each name-matched node pair tuple keeps both entries. Listing order is checked separately from tuple contents: results list the pair
-     * for forward-flow node 1 first and the pair for forward-flow node 2 second.
+     * Two-record results retain forward-node position order, including repeated entries. Four-record results list the pairs
+     * F1B1, F2B2, F1B2, F2B1, where F and B identify positions in the forward-flow and backfill relations.
      *
-     * @param full all twin pairs with their name-matched node pair tuples
+     * @param full all twin pairs with their name-matched node pairs
      * @param detail selected homonymous node-pair entries, including repeated entries
      * @param global homonymous node pairs and their distinct twin-pair counts
-     * @param unresolved twin pairs retaining two alternative tuples
      * @param label check group label
-     * @return the four bounded collections
+     * @return the three bounded collections
      */
     private def checkedOutputs(
         full: DataFrame,
         detail: DataFrame,
         global: DataFrame,
-        unresolved: DataFrame,
         label: String
     ): CheckedOutputs =
         checkSchema(s"$label full", full, FullSchema)
         checkSchema(s"$label detail", detail, DetailSchema)
         checkSchema(s"$label global", global, GlobalSchema)
-        checkSchema(s"$label unresolved", unresolved, UnresolvedSchema)
         val fullRows = smallRows(full, s"$label full")
         fullRows.foreach { row =>
-            val completeResults = results(row)
-            require(completeResults.size == 1 || completeResults.size == 2, s"$label: wrong complete-result count")
-            completeResults.foreach { tuple =>
-                require(tuple.size == 2, s"$label: a complete result lost a participant")
-                val forwardTwin = row.getAs[Row]("forwardTwin")
-                val expectedUris = Vector(forwardTwin.getAs[String]("node1_urn"), forwardTwin.getAs[String]("node2_urn"))
-                require(tuple.map(_.getAs[String]("forwardNodeUri")) == expectedUris,
-                    s"$label: complete-result ordering does not follow forward positions")
-            }
+            val pairs = nodePairs(row)
+            require(pairs.size == 2 || pairs.size == 4, s"$label: expected two or four name-matched node pairs")
+            val forwardTwin = row.getAs[Row]("forwardTwin")
+            val forwardUris = Vector(forwardTwin.getAs[String]("node1_urn"), forwardTwin.getAs[String]("node2_urn"))
+            val expectedForwardUris = if pairs.size == 2 then forwardUris else forwardUris ++ forwardUris
+            require(pairs.map(_.getAs[String]("forwardNodeUri")) == expectedForwardUris,
+                s"$label: name-matched node-pair ordering does not follow forward positions")
+            if pairs.size == 4 then
+                val backfillTwin = row.getAs[Row]("backfillTwin")
+                val firstBackfill = backfillTwin.getAs[String]("node1_urn")
+                val secondBackfill = backfillTwin.getAs[String]("node2_urn")
+                require(pairs.map(_.getAs[String]("backfillNodeUri")) ==
+                    Vector(firstBackfill, secondBackfill, secondBackfill, firstBackfill),
+                    s"$label: four-pair ordering must be F1B1, F2B2, F1B2, F2B1")
+                require(pairs.distinct.size == 4 && pairs.forall(pair =>
+                    pair.getAs[String]("role") == "partner" &&
+                        pair.getAs[String]("forwardNodeUri") != pair.getAs[String]("backfillNodeUri")),
+                    s"$label: four-pair results must retain four distinct homonymous partner pairs")
         }
         CheckedOutputs(fullRows, smallRows(detail, s"$label detail"),
-            smallRows(global, s"$label global"), smallRows(unresolved, s"$label unresolved"))
+            smallRows(global, s"$label global"))
 
     /**
      * Calculates the expected global counts from a limited number of expected or saved detail rows.
@@ -493,7 +479,7 @@ private object StepFiveCheckOps:
      * Checks the expected results for each case, including the detail and global outputs.
      *
      * @param spark the existing check session
-     * @param fixtures isolated twin-pair fixtures with literal expected name-matched node pair tuples
+     * @param fixtures isolated twin-pair fixtures with literal expected name-matched node pairs
      * @param label check group label
      * @return verified small outputs for additional focused assertions
      */
@@ -507,27 +493,20 @@ private object StepFiveCheckOps:
         require(output.full.map(twinId).toSet == expectedById.keySet, s"$label changed twin identities")
         output.full.foreach { row =>
             val expected = expectedById(twinId(row))
-            val actualResults = results(row)
-            require(resultMultiset(actualResults) == resultMultiset(expected.expectedResults), s"${expected.label}: wrong complete results: $actualResults")
+            val actualPairs = nodePairs(row)
+            require(actualPairs == expected.expectedPairs, s"${expected.label}: wrong name-matched node pairs or stored order: $actualPairs")
             require(row.getAs[Row]("forwardTwin") == expected.forwardTwin && row.getAs[Row]("backfillTwin") == expected.backfillTwin,
                 s"${expected.label}: participant fields, graph names, source sets or comparison key changed")
             require(row.getAs[Boolean]("nonIdenticalTwinsAlsoWithinForwardFlow") == expected.shared, s"${expected.label}: flag changed")
         }
-        val expectedDetail = fixtures.filter(_.expectedResults.size == 1).flatMap { value =>
-            value.expectedResults.head.filter(pair => pair.getString(1) != pair.getString(2)).map { pair =>
+        val expectedDetail = fixtures.flatMap { value =>
+            value.expectedPairs.filter(pair => pair.getString(1) != pair.getString(2)).map { pair =>
                 Row(pair.getString(1), pair.getString(2), pair.getString(3), pair.getString(0),
                     value.forwardTwin.getString(0), value.backfillTwin.getString(0), value.shared)
             }
         }
         require(multiset(output.detail) == multiset(expectedDetail), s"$label: detailed entries, roles or repetitions differ")
         require(multiset(output.global) == multiset(expectedGlobal(expectedDetail)), s"$label: global complete-twin counts differ")
-        val expectedUnresolved = expectedById.filter(_._2.expectedResults.size == 2)
-        require(output.unresolved.size == expectedUnresolved.size, s"$label: wrong unresolved twin count")
-        require(output.unresolved.map(twinId).toSet == expectedUnresolved.keySet, s"$label: wrong unresolved twins")
-        output.unresolved.foreach { row =>
-            require(resultMultiset(results(row)) == resultMultiset(expectedUnresolved(twinId(row)).expectedResults),
-                s"$label: unresolved alternatives were changed")
-        }
         output
 
     /**
@@ -592,7 +571,7 @@ private object StepFiveCheckOps:
      * Checks aggregation when one forward-flow/backfill node pair has different roles or flags.
      *
      * These three detailed fixture entries are inputs to aggregation, not claims
-     * about a new Step 5 resolution. Swapping the forward-flow and backfill node URNs creates a different node pair.
+     * about a new Step 5 match. Swapping the forward-flow and backfill node URNs creates a different node pair.
      *
      * @param spark the existing session
      */
@@ -633,14 +612,17 @@ private object StepFiveCheckOps:
             countedDetail.map(_.getString(5)).distinct.size == 2, "Complete-twin fixture lost its distinguishing repetitions")
         require(synthetic.global.exists(row => row.getString(0) == "biodata:protein/Fixture_Count_1" &&
             row.getString(1) == "biodata:protein/Fixture_Count_2" && row.getLong(3) == 3L), "Complete-twin count must be 3, not 4 or 2")
-        checkFixtures(spark, syntheticFixtures.filter(_.expectedResults.size == 2), "all unresolved")
+        val fourPairs = checkFixtures(spark, syntheticFixtures.filter(_.expectedPairs.size == 4), "four-pair cases")
+        require(fourPairs.full.size == 3 && fourPairs.detail.size == 12 && fourPairs.global.size == 12,
+            "The three four-pair fixtures must contribute all twelve homonymous pairs to detail and summary")
+        require(fourPairs.global.forall(_.getLong(3) == 1L), "Each four-pair fixture contributes one twin to each node pair")
         checkFixtures(spark, Vector.empty, "empty subset")
         checkSourceSelection(spark)
         checkAggregationOrientation(spark)
-        println(s"PASS fixtures: ${realFixtures.size + syntheticFixtures.size} explicit twins, source selections, empty/unresolved subsets, schemas and complete-twin counts")
+        println(s"PASS fixtures: ${realFixtures.size + syntheticFixtures.size} explicit twins, source selections, empty and four-pair subsets, schemas and complete-twin counts")
 
     /**
-     * Reads one bounded result table from the selected dated baseline.
+     * Reads one bounded result table from a dated baseline using the current flat output contract.
      *
      * @param spark existing session using the established credential provider
      * @param tablePath explicit Delta path for one saved Step 5 table
@@ -651,37 +633,35 @@ private object StepFiveCheckOps:
         frame(spark, smallRows(data, s"baseline $tablePath"), data.schema)
 
     /**
-     * Checks that Step 5 results match the selected dated baseline's saved outputs.
+     * Checks that Step 5 results match a dated baseline saved with the current flat output contract.
      *
-     * Reads each small saved table once, compares name-matched node pair tuples and metadata,
+     * Reads each small saved table once, compares name-matched node pairs and metadata,
      * checks how many times each detail row appears, and independently counts distinct
      * twin pairs from saved detail. The occurrence export and writers are never used.
+     * Historical runs with nested tuple arrays and the previous table names are not baselines for this check.
      *
      * @param spark the same session already used for fixtures
-     * @param runId baseline date in YYYY-MM-DD format under the personal DEV investigation path
+     * @param runId date of a flat-output baseline in YYYY-MM-DD format under the personal DEV investigation path
      */
     def runBaseline(spark: SparkSession, runId: String): Unit =
         val runPath = s"s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/$runId"
         val twins = readBaseline(spark, s"$runPath/nonIdenticalTwinPairs")
-        val savedFull = readBaseline(spark, s"$runPath/twinPairsWithNameMatchedNodePairTuples")
+        val savedFull = readBaseline(spark, s"$runPath/twinPairsWithNameMatchedNodePairs")
         val savedDetail = readBaseline(spark, s"$runPath/homonymousNodePairsPerTwinPair")
         val savedSummary = readBaseline(spark, s"$runPath/twinPairCountPerHomonymousNodePair")
-        val savedUnresolved = readBaseline(spark, s"$runPath/twinPairsWithMultipleNameMatchedNodePairTuples")
         checkSchema("saved full results", savedFull, FullSchema)
         checkSchema("saved detail", savedDetail, DetailSchema)
         checkSchema("saved summary", savedSummary, GlobalSchema)
-        checkSchema("saved unresolved", savedUnresolved, UnresolvedSchema)
         val actual = evaluate(twins, "saved-output regression")
         val twinRows = smallRows(twins, "saved twins")
         val savedFullRows = smallRows(savedFull, "saved full results")
         val detailRows = smallRows(savedDetail, "saved detail")
         val summaryRows = smallRows(savedSummary, "saved summary")
-        val unresolvedRows = smallRows(savedUnresolved, "saved unresolved")
-        val expectedResults = savedFullRows.map(row => twinId(row) -> resultMultiset(results(row))).toMap
-        require(expectedResults.size == savedFullRows.size && actual.full.size == savedFullRows.size,
+        val expectedPairs = savedFullRows.map(row => twinId(row) -> nodePairs(row)).toMap
+        require(expectedPairs.size == savedFullRows.size && actual.full.size == savedFullRows.size,
             "Baseline lost or duplicated complete twin identities")
-        require(actual.full.map(twinId).toSet == expectedResults.keySet, "Baseline changed complete twin identities")
-        actual.full.foreach(row => require(resultMultiset(results(row)) == expectedResults(twinId(row)), s"Baseline complete results changed for ${twinId(row)}"))
+        require(actual.full.map(twinId).toSet == expectedPairs.keySet, "Baseline changed complete twin identities")
+        actual.full.foreach(row => require(nodePairs(row) == expectedPairs(twinId(row)), s"Baseline name-matched node pairs or stored order changed for ${twinId(row)}"))
         val actualMetadata = actual.full.map(row => Row.fromSeq(TwinSchema.fieldNames.map(name => row.getAs[Any](name)).toVector))
         val savedMetadata = savedFullRows.map(row => Row.fromSeq(TwinSchema.fieldNames.map(name => row.getAs[Any](name)).toVector))
         require(multiset(actualMetadata) == multiset(twinRows) && multiset(savedMetadata) == multiset(twinRows),
@@ -689,20 +669,16 @@ private object StepFiveCheckOps:
         require(multiset(actual.detail) == multiset(detailRows), "Baseline detailed multiset differs")
         require(multiset(actual.global) == multiset(summaryRows), "Baseline summary URI/name pairs or twin counts differ")
         require(multiset(actual.global) == multiset(expectedGlobal(detailRows)), "Baseline complete-twin counts differ from independent saved-detail counts")
-        val expectedUnresolved = unresolvedRows.map(row => twinId(row) -> resultMultiset(results(row))).toMap
-        require(actual.unresolved.size == unresolvedRows.size && actual.unresolved.map(twinId).toSet == expectedUnresolved.keySet,
-            "Baseline unresolved subset differs")
-        actual.unresolved.foreach(row => require(resultMultiset(results(row)) == expectedUnresolved(twinId(row)), "Baseline unresolved alternatives differ"))
-        println(s"PASS baseline $runId: ${actual.full.size} twins, ${actual.detail.size} detailed entries, ${actual.global.size} global pairs, ${actual.unresolved.size} unresolved; no investigation datasets written")
+        println(s"PASS baseline $runId: ${actual.full.size} twins, ${actual.detail.size} detailed entries, ${actual.global.size} global pairs; no investigation datasets written")
 
-/** Small Scala entry point for fixture checks and bounded dated-baseline regression. */
+/** Small Scala entry point for fixture checks and bounded regression against dated flat-output baselines. */
 object StepFiveChecks:
 
     /**
      * Runs fixtures, optionally followed by saved-output regression in one session.
      *
-     * Reuses the normal local Spark settings and launch-supplied heap. Reads saved outputs only when a baseline run is supplied and writes no
-     * investigation tables. Spark closes after the checks.
+     * Reuses the normal local Spark settings and launch-supplied heap. Reads saved outputs only when a baseline run using the current flat output
+     * contract is supplied and writes no investigation tables. Spark closes after the checks.
      *
      * @param args no arguments, or --baseline-run YYYY-MM-DD
      */

@@ -190,8 +190,8 @@ object DataOps:
     /**
      * Constructs the struct used to store a name-matched node pair.
      *
-     * The rule selecting a tuple establishes matching normalized names for its node pairs. The struct contains role, forwardNodeUri, backfillNodeUri
-     * and matchedNodeName, in that order.
+     * The matching rules establish the same normalized name for both nodes. The struct contains role, forwardNodeUri, backfillNodeUri and
+     * matchedNodeName, in that order.
      *
      * @param role
      *   the column containing regulator, target or partner
@@ -218,14 +218,15 @@ object DataOps:
         )
 
     /**
-     * Selects the name-matched node pair tuples for one established twin pair.
+     * Finds the name-matched node pairs for one established twin pair.
      *
-     * Defines two tuple expressions once: straight pairs forward nodes 1 and 2 with backfill nodes 1 and 2; crossed pairs them with backfill nodes 2
-     * and 1. Both tuples list the pair for forward node 1 first and preserve repeated records.
+     * Directed twins pair regulator with regulator and target with target. Undirected twins use normalized names and node identity, including
+     * self-reference. When an undirected twin pair has four distinct nodes sharing one normalized name, each forward-flow node forms a homonymous
+     * pair with each backfill node, so all four pairs are retained.
      *
-     * Directed twins take the straight tuple, matching regulator with regulator and target with target. Undirected twins first take the straight
-     * tuple when either relation is self-referencing. Otherwise, the rules choose by different names, then shared node identity, and retain both
-     * alternatives when unresolved. The early self-reference branch covers repeated nodes with or without a shared node.
+     * Defines the straight and crossed pairs once. Straight pairs forward nodes 1 and 2 with backfill nodes 1 and 2; crossed pairs them with
+     * backfill nodes 2 and 1. Returns two records in forward-node order, or all four with the straight pairs followed by the crossed pairs. Repeated
+     * records remain. The early self-reference branch covers repeated nodes with or without a shared node.
      *
      * Step 4 guarantees matching normalized names for every node pair retained by these rules, so matchedNodeName comes from the forward node.
      *
@@ -234,9 +235,9 @@ object DataOps:
      * @param backfillTwin
      *   its backfill twin's canonical relation struct
      * @return
-     *   one tuple when resolved, or two alternatives in straight-then-crossed order when unresolved
+     *   one array containing two or four name-matched node pairs
      */
-    private def nameMatchedNodePairTuples(forwardTwin: Column, backfillTwin: Column): Column =
+    private def nameMatchedNodePairs(forwardTwin: Column, backfillTwin: Column): Column =
         val forwardNode1Urn             = forwardTwin.getField("node1_urn")
         val forwardNode2Urn             = forwardTwin.getField("node2_urn")
         val backfillNode1Urn            = backfillTwin.getField("node1_urn")
@@ -255,75 +256,73 @@ object DataOps:
         val forwardNode1Role = when(undirected, lit("partner")).otherwise(lit("regulator"))
         val forwardNode2Role = when(undirected, lit("partner")).otherwise(lit("target"))
 
-        val straightNodePairTuple = array(
+        val straightNodePairs = array(
           nameMatchedNodePair(forwardNode1Role, forwardNode1Urn, backfillNode1Urn, forwardNode1NormalizedName),
           nameMatchedNodePair(forwardNode2Role, forwardNode2Urn, backfillNode2Urn, forwardNode2NormalizedName)
         )
-        val crossedNodePairTuple  = array(
+        val crossedNodePairs  = array(
           nameMatchedNodePair(lit("partner"), forwardNode1Urn, backfillNode2Urn, forwardNode1NormalizedName),
           nameMatchedNodePair(lit("partner"), forwardNode2Urn, backfillNode1Urn, forwardNode2NormalizedName)
         )
 
         when(
           undirected,
-          when(hasSelfReferencingRelation, array(straightNodePairTuple))
-              .when(forwardNodesHaveDifferentNames && namesInSameOrderInBothRelations, array(straightNodePairTuple))
-              .when(forwardNodesHaveDifferentNames, array(crossedNodePairTuple))
-              .when(nodeSharedAtSamePosition, array(straightNodePairTuple))
-              .when(nodeSharedAtOtherPosition, array(crossedNodePairTuple))
-              .otherwise(array(straightNodePairTuple, crossedNodePairTuple))
-        ).otherwise(array(straightNodePairTuple))
+          when(hasSelfReferencingRelation, straightNodePairs)
+              .when(forwardNodesHaveDifferentNames && namesInSameOrderInBothRelations, straightNodePairs)
+              .when(forwardNodesHaveDifferentNames, crossedNodePairs)
+              .when(nodeSharedAtSamePosition, straightNodePairs)
+              .when(nodeSharedAtOtherPosition, crossedNodePairs)
+              .otherwise(concat(straightNodePairs, crossedNodePairs))
+        ).otherwise(straightNodePairs)
 
     extension (nonIdenticalTwinPairs: DataFrame)
 
         /**
-         * Adds nameMatchedNodePairTuples to each non-identical twin pair.
+         * Adds nameMatchedNodePairs to each non-identical twin pair.
          *
-         * The column contains one name-matched node pair tuple for a resolved twin pair, or two different tuples for an unresolved twin pair. Each
-         * tuple contains exactly two node pairs, including any identical node pair or repeated record. The pair for forward-flow node 1 is stored
-         * first, followed by the pair for forward-flow node 2. All existing columns, including both canonical relation structs and the flag, remain
-         * unchanged.
+         * The column contains one array of two name-matched node pairs, or four when all four undirected nodes are distinct and share one normalized
+         * name. Identical pairs and repeated records remain. Each twin pair stays one row with both canonical relation structs, the flag and all
+         * other existing columns unchanged.
          *
-         * Selects tuples by directed roles or undirected normalized names and node identity, with the early self-reference shortcut. See <a
+         * Finds pairs by directed roles or undirected normalized names and node identity, with the early self-reference shortcut. See <a
          * href="README.md#direct-domain-rules">the domain rules</a> and <a href="README.md#from-domain-rules-to-implementation">their
          * implementation</a>.
          *
          * The receiver contains one row per established non-identical twin pair.
          *
          * @return
-         *   each twin pair with its nameMatchedNodePairTuples collection
+         *   each twin pair with its nameMatchedNodePairs array
          */
-        def withNameMatchedNodePairTuples: DataFrame =
+        def withNameMatchedNodePairs: DataFrame =
             nonIdenticalTwinPairs.withColumn(
-              "nameMatchedNodePairTuples",
-              nameMatchedNodePairTuples(col("forwardTwin"), col("backfillTwin"))
+              "nameMatchedNodePairs",
+              nameMatchedNodePairs(col("forwardTwin"), col("backfillTwin"))
             )
 
-    extension (twinPairsWithNameMatchedNodePairTuples: DataFrame)
+    extension (twinPairsWithNameMatchedNodePairs: DataFrame)
 
         /**
-         * Selects detailed homonymous node-pair entries from resolved twin pairs.
+         * Selects homonymous node pairs with the twin pairs in which they were found.
          *
-         * First keeps twin pairs with one name-matched node pair tuple, then turns each tuple's two entries into separate rows and keeps pairs whose
-         * node URNs differ. Selects node URN/name columns first, followed by role, both canonical relation IDs and the flag. For two self-referencing
-         * relations, each relation uses its node twice, so both records remain in the detail; directed records retain their different roles. No
-         * distinct operation is applied. Unresolved alternatives contribute no selected node pairs. The identical node pairs remain available in the
-         * tuple attached to each twin pair; this step selects its homonymous node pairs.
+         * Turns each name-matched node pair into a row and keeps pairs whose node URNs differ. When all four undirected nodes are distinct and share
+         * one normalized name, all four pairs contribute to the detail. Selects node URN/name columns first, followed by role, both canonical
+         * relation IDs and the flag.
          *
-         * The receiver twinPairsWithNameMatchedNodePairTuples contains twin pairs with both canonical relations and one or two name-matched node pair
-         * tuples.
+         * For two self-referencing relations, each relation uses its node twice, so both records remain in the detail; directed records retain their
+         * different roles. No distinct operation is applied. Identical pairs remain available in the full twin-pair result.
+         *
+         * The receiver contains twin pairs with both canonical relations and a nameMatchedNodePairs array.
          *
          * @return
          *   homonymous node-pair entries with the exact seven-column detail schema
          */
         def selectHomonymousNodePairsPerTwinPair: DataFrame =
-            twinPairsWithNameMatchedNodePairTuples
-                .where(size(col("nameMatchedNodePairTuples")) === 1)
+            twinPairsWithNameMatchedNodePairs
                 .select(
                   col("forwardCanonicalId"),
                   col("backfillCanonicalId"),
                   col("nonIdenticalTwinsAlsoWithinForwardFlow"),
-                  explode(element_at(col("nameMatchedNodePairTuples"), 1)).as("nameMatchedNodePair")
+                  explode(col("nameMatchedNodePairs")).as("nameMatchedNodePair")
                 )
                 .where(
                   col("nameMatchedNodePair.forwardNodeUri") =!= col("nameMatchedNodePair.backfillNodeUri")
@@ -338,28 +337,10 @@ object DataOps:
                   col("nonIdenticalTwinsAlsoWithinForwardFlow")
                 )
 
-        /**
-         * Retains unresolved twin pairs and both name-matched node pair tuples.
-         *
-         * Selects twin pairs with two name-matched node pair tuples and keeps both canonical relation IDs alongside those tuples. Every tuple retains
-         * two entries. Canonical relation structs, source sets and the independent flag remain in twinPairsWithNameMatchedNodePairTuples rather than
-         * this output.
-         *
-         * The receiver twinPairsWithNameMatchedNodePairTuples contains twin pairs with both canonical relations and one or two name-matched node pair
-         * tuples.
-         *
-         * @return
-         *   unresolved twin pairs and their two name-matched node pair tuples
-         */
-        def selectTwinPairsWithMultipleNameMatchedNodePairTuples: DataFrame =
-            twinPairsWithNameMatchedNodePairTuples
-                .where(size(col("nameMatchedNodePairTuples")) === 2)
-                .select("forwardCanonicalId", "backfillCanonicalId", "nameMatchedNodePairTuples")
-
     extension (homonymousNodePairsPerTwinPair: DataFrame)
 
         /**
-         * Aggregates homonymous node pairs and counts the distinct resolved twin pairs containing them.
+         * Aggregates homonymous node pairs and counts the distinct twin pairs that give each pair.
          *
          * Groups detail by the forward-flow node URN, backfill node URN and their normalized name. The node identities fix that name, so grouping on
          * it keeps the name without splitting a group or choosing one value from it. Counts distinct (forwardCanonicalId, backfillCanonicalId) pairs,
