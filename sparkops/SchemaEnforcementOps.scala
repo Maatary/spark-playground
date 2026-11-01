@@ -46,10 +46,12 @@ object SchemaEnforcementOps:
      *      {{{
      *     // buildNullabilityEnforcedArrayElementsExpr(arrayExpr, elemType, path, id)
      *     transform(arrayExpr,
-     *       e => coalesce(e, raise_error(...), defaultLiteralFor(elemType)))
+     *       e => buildSchemaEnforcedFieldExpr(e, elemType, path, fieldNullable = false, id))
      *      }}}
-     *      The non-null default makes the lambda non-nullable, so the transformed array becomes `ArrayType(elemType, containsNull = false)` at
-     *      analysis time. (If `containsNull = true`, this step is a no-op and we keep the array as-is.)
+     *      Each element is enforced like a field that must not be null: a scalar element through the coalesce pattern, a struct element through the
+     *      struct container rule, and an array element through these two array rules. Either way the lambda is non-nullable, so the transformed array
+     *      becomes `ArrayType(elemType, containsNull = false)` at analysis time. (If `containsNull = true`, this step is a no-op and we keep the
+     *      array as-is, including everything inside its elements.)
      *
      * 2. **Container rule — enforce the array itself** (only when `field.nullable = false`). With element nullability already aligned, we make the
      * **container** non-nullable via the coalesce idiom and a typed empty array literal:
@@ -64,11 +66,11 @@ object SchemaEnforcementOps:
      * avoid any illegal down-nullability cast when we enforce the container. (If the container is nullable, we simply return the element-aligned
      * array without wrapping it in `coalesce`.)
      *
-     * ==Struct containers (top-level struct fields).==
+     * ==Struct containers.==
      *
      * Struct-typed fields also have a container nullability given by `StructField.nullable`. For
-     * top-level struct fields (the `isRoot = true` case), we treat this as a container-level
-     * contract:
+     * struct fields at any depth (top-level, nested in another struct, or the elements of an array
+     * whose elements must not be null), we treat this as a container-level contract:
      *
      *   - When `nullable = true`, a null struct is propagated as `null` and its children are not
      *     evaluated. This matches `Option[Struct]` semantics: either the container is absent, or
@@ -86,7 +88,7 @@ object SchemaEnforcementOps:
      *           sourceStruct.isNull,
      *           raise_error(concat(lit(s"null value at column $path, id: "), idColumn))
      *         ).otherwise(structExpr),
-     *         defaultStructLiteralFor(structType, path)
+     *         defaultStructLiteralFor(structType)
      *       )
      *     }}}
      *
@@ -95,13 +97,10 @@ object SchemaEnforcementOps:
      *     runtime either:
      *
      *       - the source struct is non-null, in which case `structExpr` is evaluated and the
-     *         scalar/array rules above enforce the declared nullability of the child fields, or
+     *         scalar/array rules above, or this struct rule for a nested struct, enforce the
+     *         declared nullability of the child fields, or
      *       - the source struct is null, in which case `raise_error(...)` fails fast at the
      *         struct's logical path.
-     *
-     * Nested struct types (`StructType` fields inside non-root structs) are currently rejected
-     * with an `IllegalArgumentException`, to keep the implementation focused on top-level
-     * container recovery.
      *
      * As with scalars and arrays, these struct container expressions serve a dual purpose:
      * they realign Spark's inferred logical schema (including `nullable` flags) with the
@@ -116,7 +115,6 @@ object SchemaEnforcementOps:
      * @param sourceColumn the field expression from the loaded DataFrame
      * @param expectedType the field type declared by the encoder
      * @param logicalPath the field path included in validation errors
-     * @param isRoot whether this is a top-level field
      * @param fieldNullable whether the declared field permits null
      * @param recordIdColumn the record identifier included in validation errors
      * @return the field expression enforcing the declared nullability
@@ -125,12 +123,11 @@ object SchemaEnforcementOps:
         sourceColumn: Column,
         expectedType: DataType,
         logicalPath: String,
-        isRoot: Boolean,
         fieldNullable: Boolean,
         recordIdColumn: Column
     ): Column =
-        (expectedType, isRoot) match
-            case (structType: StructType, true) =>
+        expectedType match
+            case structType: StructType => // <-- at any depth: a top-level field, a field of another struct, or an array element
                 val fieldExpressions = structType.fields.map { field =>
                     val childPath   = s"$logicalPath.`${field.name}`"
                     val childColumn = sourceColumn.getField(field.name)
@@ -139,7 +136,6 @@ object SchemaEnforcementOps:
                         sourceColumn = childColumn,
                         expectedType = field.dataType,
                         logicalPath = childPath,
-                        isRoot = false,
                         fieldNullable = field.nullable,
                         recordIdColumn = recordIdColumn
                     ).as(field.name)
@@ -150,7 +146,7 @@ object SchemaEnforcementOps:
                 if fieldNullable then
                     when(sourceColumn.isNull, lit(null)).otherwise(structExpr)
                 else
-                    val defaultStructExpr = defaultStructLiteralFor(structType, logicalPath)
+                    val defaultStructExpr = defaultStructLiteralFor(structType)
                     coalesce(
                         when(
                             sourceColumn.isNull,
@@ -159,12 +155,7 @@ object SchemaEnforcementOps:
                         defaultStructExpr
                     )
 
-            case (structType: StructType, false) =>
-                throw new IllegalArgumentException(
-                    s"Nested struct handling not implemented for $logicalPath (type $structType)"
-                )
-
-            case (ArrayType(elementType, containsNull), _) =>
+            case ArrayType(elementType, containsNull) =>
                 val arrayWithEnforcedElements =
                     if containsNull then sourceColumn
                     else buildNullabilityEnforcedArrayElementsExpr(sourceColumn, elementType, s"$logicalPath[*]", recordIdColumn)
@@ -190,7 +181,7 @@ object SchemaEnforcementOps:
         else
             coalesce(
                 sourceColumn,
-                raise_error(concat(lit(s"null value at column $sourceColumn, id: "), recordIdColumn)),
+                raise_error(concat(lit(s"null value at column ${expectedField.name}, id: "), recordIdColumn)),
                 defaultLiteralFor(expectedField.dataType)
             )
 
@@ -202,11 +193,13 @@ object SchemaEnforcementOps:
     ): Column =
         transform(
             arrayToTransform,
-            element =>
-                coalesce(
-                    element,
-                    raise_error(concat(lit(s"null element at column $logicalPath, id: "), recordIdColumn)),
-                    defaultLiteralFor(elementType)
+            element => // <-- enforced like a field that must not be null, so a struct or array element is enforced in turn
+                buildSchemaEnforcedFieldExpr(
+                    sourceColumn = element,
+                    expectedType = elementType,
+                    logicalPath = logicalPath,
+                    fieldNullable = false,
+                    recordIdColumn = recordIdColumn
                 )
         )
 
@@ -223,16 +216,14 @@ object SchemaEnforcementOps:
     private def emptyArrayLiteral(elementType: DataType, containsNull: Boolean): Column =
         array().cast(ArrayType(elementType, containsNull))
 
-    private def defaultStructLiteralFor(structType: StructType, logicalPath: String): Column =
+    private def defaultStructLiteralFor(structType: StructType): Column =
         struct(
             structType.fields.map {
                 case StructField(name, arr: ArrayType, _, _) =>
                     emptyArrayLiteral(arr.elementType, arr.containsNull).as(name)
 
                 case StructField(name, st: StructType, _, _) =>
-                    throw new IllegalArgumentException(
-                        s"default literal for nested struct not supported at $logicalPath.$name"
-                    )
+                    defaultStructLiteralFor(st).as(name) // <-- a nested struct gets its own default struct, a typing witness like the others
 
                 case StructField(name, dt, _, _) =>
                     defaultLiteralFor(dt).as(name)
@@ -266,7 +257,6 @@ object SchemaEnforcementOps:
                     sourceColumn = col(field.name),
                     expectedType = field.dataType,
                     logicalPath = s"`${field.name}`",
-                    isRoot = true,
                     fieldNullable = field.nullable,
                     recordIdColumn = idColumn
                 ).as(field.name)
