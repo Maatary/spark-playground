@@ -1042,7 +1042,7 @@ object Delta8:
     def createMergeSrcDFForChangeLog[T <: JsonLdEntity](ds: Dataset[ChangeEvent[T]])(using encT: Encoder[T]): DataFrame =
         val nonKeyCols = encT.schema.fieldNames.filterNot(_ == "@id").map(f => col(s"entity.`$f`").as(f))
         ds.toDF
-          .select((col("key").as("@id") +: nonKeyCols :+ col("_type")): _*)
+          .select((col("key").as("@id") +: nonKeyCols :+ col("_type"))*)
           .alias("source")
 
 
@@ -1059,9 +1059,9 @@ object Delta8:
                     source.as("source"),
                     col(s"target.`@id`") === col(s"source.`@id`")
                 )
-                .whenMatched(col("source._type") === lit(classOf[Tombstone[_]].getSimpleName)).delete()
-                .whenMatched(col("source._type") === lit(classOf[Upsert[_]].getSimpleName)).updateAll()
-                .whenNotMatched(col("source._type") === lit(classOf[Upsert[_]].getSimpleName)).insertAll()
+                .whenMatched(col("source._type") === lit(classOf[Tombstone[?]].getSimpleName)).delete()
+                .whenMatched(col("source._type") === lit(classOf[Upsert[?]].getSimpleName)).updateAll()
+                .whenNotMatched(col("source._type") === lit(classOf[Upsert[?]].getSimpleName)).insertAll()
                 .execute()
                 .pipe { _ => () }
           }

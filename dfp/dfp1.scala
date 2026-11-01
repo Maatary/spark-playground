@@ -77,7 +77,7 @@ object DFP1:
         val genVarSubset =
           genVarDf
             .join(broadcast(rsIdDF), genVarDf("_c2") === rsIdDF("rs_id"), "left_semi")
-            .filter($"_c2".isin(rsIdDF.select("rs_id").as[String].collect(): _*))
+            .filter($"_c2".isin(rsIdDF.select("rs_id").as[String].collect()*))
 
         genVarSubset
           .tap(_.explain(true))

@@ -183,7 +183,7 @@ object remapperOut3:
                   explode(
                     filter(
                       $"control.attr",
-                      a => a.getField("_name").isin(relationAttributeIdNames: _*)
+                      a => a.getField("_name").isin(relationAttributeIdNames*)
                     )
                   ).as("attr")
                 )
