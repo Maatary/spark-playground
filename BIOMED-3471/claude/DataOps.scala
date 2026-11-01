@@ -210,13 +210,15 @@ object DataOps:
         )
 
     /**
-     * ==Step 5: which forward-flow node goes with which backfill node==
+     * ==Step 5: the homonymous node pairs of each twin pair==
      *
-     * The two relations of a twin pair have the same name key. So each node of the forward-flow relation has the same normalized name as the backfill
-     * node that goes with it, and at least one of them has a different node URN. Step 5 finds which forward-flow node goes with which backfill node.
-     * In a directed relation the roles decide. A position is the place of a node in the canonical relation ID: node 1 is at position 1, and node 2 is
-     * at position 2. In an undirected relation, such as Binding, the positions do not decide: the canonical relation ID orders the two partners by
-     * node TERMite ID, so the same node can be at position 1 in one relation and at position 2 in the other.
+     * Step 5 finds the homonymous node pairs of each twin pair. The two relations of a twin pair have the same name key but different canonical
+     * relation IDs, so the backfill twin holds a homonym in place of at least one node of the forward-flow relation. To find these homonyms, step 5
+     * pairs each forward-flow node with a backfill node of the same normalized name, and each node pair whose two node URNs differ is a homonymous
+     * node pair. In a directed relation the roles tell which nodes go together. A position is the place of a node in the canonical relation ID: node
+     * 1 is at position 1, and node 2 is at position 2. In an undirected relation, such as Binding, the positions do not tell which nodes go together:
+     * the canonical relation ID orders the two partners by node TERMite ID, so the same node can be at position 1 in one relation and at position 2
+     * in the other.
      *
      * {{{
      * forward-flow relation   biodata:binding/partner/Concept_86378312/partner/HGNC24008   names collagen, MIA3
@@ -238,25 +240,25 @@ object DataOps:
      * Step 5 computes the normalized names of both forward-flow nodes and of backfill node 1 from their names in `forwardTwin` and `backfillTwin`. It
      * uses [[normalizedName]], the same function that step 3 uses to build the name key, so guarantee 2 holds for these names.
      *
-     * Step 5 uses these names:
+     * Step 5 uses these terms:
      *
-     *   - A name-matched node pair is one forward-flow node and one backfill node whose normalized names are the same. Step 5 stores it as the struct
-     *     `{role, forwardNodeUri, backfillNodeUri, matchedNodeName}`.
+     *   - A name-matched node pair is a node of the forward-flow relation and a node that the backfill twin holds in its place. The two nodes always
+     *     have the same normalized name. Step 5 stores it as the struct `{role, forwardNodeUri, backfillNodeUri, matchedNodeName}`.
      *   - An identical node pair is a name-matched node pair whose forward-flow node and backfill node have the same node URN.
      *   - A homonymous node pair is a name-matched node pair whose two nodes have different node URNs.
-     *   - A name-matched node pair tuple is a pairing of the two nodes of the forward-flow relation with the two nodes of its backfill twin, in which
-     *     each forward-flow node goes with a backfill node of the same normalized name. It holds two name-matched node pairs, the one of forward-flow
-     *     node 1 first and the one of forward-flow node 2 second.
-     *   - A twin pair is resolved when step 5 can decide which forward-flow node goes with which backfill node, and unresolved when it cannot. The
-     *     result holds one tuple for a resolved twin pair, and the two possible answers for an unresolved one.
+     *   - A name-matched node pair tuple is one way to pair the two nodes of the forward-flow relation with the two nodes of its backfill twin, in
+     *     which each forward-flow node goes with a node that the backfill twin holds in its place. It holds two name-matched node pairs, the one of
+     *     forward-flow node 1 first and the one of forward-flow node 2 second.
+     *   - The straight tuple puts forward-flow node 1 with backfill node 1, and forward-flow node 2 with backfill node 2. The crossed tuple puts
+     *     forward-flow node 1 with backfill node 2, and forward-flow node 2 with backfill node 1.
      *
      * Step 5 applies the first rule that fits. A node appears in both relations when the forward-flow relation and the backfill twin both hold its
      * node URN. A relation holds the same node twice when its two nodes have the same node URN, such as an EGFR node that binds itself, and not when
      * two different nodes have the same normalized name.
      *
      *   - Rule A. In a directed relation, the forward-flow regulator goes with the backfill regulator, and the forward-flow target goes with the
-     *     backfill target. Guarantee 2 makes their normalized names the same, so step 5 tests no name. The homonymous node pairs are the node pairs
-     *     whose node URNs differ, and guarantee 3 makes at least one of them differ.
+     *     backfill target. The name key already holds their normalized names in role order, so step 5 tests no name. The homonymous node pairs are
+     *     the node pairs whose node URNs differ, and guarantee 3 makes at least one of them differ.
      *   - Rule B. When the two nodes of an undirected relation have different normalized names, each forward-flow node goes with the backfill node
      *     that has the same normalized name. Guarantee 2 makes that backfill node exist, and the two names being different makes it the only one. The
      *     homonymous node pairs are the node pairs whose node URNs differ, and guarantee 3 makes at least one of them differ.
@@ -268,24 +270,22 @@ object DataOps:
      *     relation holds the same node twice, every node of the other relation goes with that repeated node. When both relations hold a node twice,
      *     the two repeated nodes go with each other. Both node pairs are homonymous node pairs, because no node appears in both relations.
      *   - Rule C3. When the two nodes of an undirected relation have the same normalized name, no node appears in both relations, and neither
-     *     relation holds the same node twice, the four nodes are different nodes with the same normalized name. Each forward-flow node goes with one
-     *     of its two homonyms in the backfill twin, but step 5 cannot decide which one. The twin pair is unresolved, step 5 keeps both possible
-     *     answers, and it reports no homonymous node pair.
+     *     relation holds the same node twice, the four nodes are different nodes with the same normalized name. All four are therefore homonyms of
+     *     one another, which is what step 5 looks for, and each backfill node can stand in place of either forward-flow node. So step 5 takes both
+     *     tuples, and the homonymous node pairs are all four node pairs: each forward-flow node with each backfill node.
      *
-     * The code writes down the two possible answers, `straightNodePairTuple` and `crossedNodePairTuple`, and states each rule as a choice between
-     * them. The straight answer puts forward-flow node 1 with backfill node 1, and forward-flow node 2 with backfill node 2. The crossed answer puts
-     * forward-flow node 1 with backfill node 2, and forward-flow node 2 with backfill node 1. The rules choose like this:
+     * The code writes down the two tuples, `straightNodePairTuple` and `crossedNodePairTuple`, and states for each rule which of them it takes:
      *
-     *   - Rule A takes the straight answer, because node 1 is the regulator and node 2 is the target in both relations.
-     *   - Rule B takes the straight answer when both relations list the two names in the same order, and the crossed answer otherwise. In the
-     *     collagen example, collagen is node 1 of the forward-flow relation and node 2 of the backfill twin, so rule B takes the crossed answer: the
-     *     collagen node `Concept_86378312` goes with the collagen node `MSCAN_12001170`, and the MIA3 node `HGNC24008` goes with itself.
-     *   - Rule C1 takes the straight answer when the shared node is at the same position in both relations, and the crossed answer otherwise.
-     *   - Rule C2 takes the straight answer, because both answers hold the same node pairs.
-     *   - Rule C3 keeps both answers.
+     *   - Rule A takes the straight tuple, because node 1 is the regulator and node 2 is the target in both relations.
+     *   - Rule B takes the straight tuple when both relations list the two names in the same order, and the crossed tuple otherwise. In the collagen
+     *     example, collagen is node 1 of the forward-flow relation and node 2 of the backfill twin, so rule B takes the crossed tuple: the collagen
+     *     node `Concept_86378312` goes with the collagen node `MSCAN_12001170`, and the MIA3 node `HGNC24008` goes with itself.
+     *   - Rule C1 takes the straight tuple when the shared node is at the same position in both relations, and the crossed tuple otherwise.
+     *   - Rule C2 takes the straight tuple, because both tuples hold the same node pairs.
+     *   - Rule C3 takes both tuples.
      *
-     * Every answer that the rules choose puts together two nodes with the same normalized name, because step 4 matched the twin pair on its name key.
-     * So each node pair takes `matchedNodeName` from its forward-flow node.
+     * Every tuple that the rules take puts each forward-flow node with a backfill node of the same normalized name, because step 4 matched the twin
+     * pair on its name key. So each node pair takes `matchedNodeName` from its forward-flow node.
      *
      * These are results of the test cases, as Spark prints them. P2, P3 and P4 are protein nodes named insulin or INSR. E1, E2, E3 and E4 are four
      * different protein nodes named EGFR, in the order of their node TERMite IDs. N1 and N2 are two more protein nodes named EGFR, and in the rule A
@@ -339,7 +339,7 @@ object DataOps:
           nameMatchedNodePair(forwardNode1Role, forwardNode1Urn, backfillNode1Urn, forwardNode1NormalizedName),
           nameMatchedNodePair(forwardNode2Role, forwardNode2Urn, backfillNode2Urn, forwardNode2NormalizedName)
         )
-        val crossedNodePairTuple  = array( // <-- only undirected twin pairs take the crossed answer, so both nodes are partners
+        val crossedNodePairTuple  = array( // <-- only undirected twin pairs take the crossed tuple, so both nodes are partners
           nameMatchedNodePair(lit(Partner), forwardNode1Urn, backfillNode2Urn, forwardNode1NormalizedName),
           nameMatchedNodePair(lit(Partner), forwardNode2Urn, backfillNode1Urn, forwardNode2NormalizedName)
         )
@@ -355,8 +355,8 @@ object DataOps:
     /**
      * ==Step 5: every twin pair with its name-matched node pair tuples==
      *
-     * Every twin pair of step 4, with the result of rules A to C in `nameMatchedNodePairTuples`: one tuple when the twin pair is resolved, and the
-     * two possible answers when it is unresolved. Each tuple keeps both of its node pairs, including an identical node pair.
+     * Step 5 adds to each twin pair of step 4 the column `nameMatchedNodePairTuples`, which holds the tuples that rules A to C take: one tuple, or
+     * the straight and the crossed tuple under rule C3. Each tuple keeps both of its node pairs, including an identical node pair.
      *
      * Columns: forwardCanonicalId, backfillCanonicalId, nonIdenticalTwinsAlsoWithinForwardFlow, forwardTwin, backfillTwin, nameMatchedNodePairTuples.
      */
@@ -368,10 +368,11 @@ object DataOps:
             .enforceAs[TwinPairWithNameMatchedNodePairTuples](to_json(struct(col("forwardCanonicalId"), col("backfillCanonicalId"))))
 
     /**
-     * ==Step 5: the homonymous node pairs of each resolved twin pair, the detail table==
+     * ==Step 5: the homonymous node pairs of each twin pair, the detail table==
      *
-     * From each resolved twin pair, step 5 keeps the node pairs of its one tuple whose two node URNs differ: its homonymous node pairs. An unresolved
-     * twin pair gives no entry.
+     * From each twin pair, step 5 keeps the node pairs of its tuples whose two node URNs differ: its homonymous node pairs. A twin pair of rule C3
+     * gives the four node pairs of its two tuples, because all four of its nodes are homonyms of one another, and each backfill node can stand in
+     * place of either forward-flow node.
      *
      * One row is one entry: a homonymous node pair, the role at which the twin pair gives it, and the twin pair. Repeated entries stay. A twin pair
      * in which both relations hold a node twice gives the same homonymous node pair twice.
@@ -382,13 +383,11 @@ object DataOps:
     def computeHomonymousNodePairsPerTwinPair(
         twinPairsWithNameMatchedNodePairTuplesDS: Dataset[TwinPairWithNameMatchedNodePairTuples]
     ): Dataset[HomonymousNodePairWithTwinPair] =
-        val resolvedTwinPair = size(col("nameMatchedNodePairTuples")) === 1 // <-- an unresolved twin pair keeps its two possible answers
-        val nodeUrnsDiffer   = col("nameMatchedNodePair.forwardNodeUri") =!= col("nameMatchedNodePair.backfillNodeUri")
+        val nodeUrnsDiffer = col("nameMatchedNodePair.forwardNodeUri") =!= col("nameMatchedNodePair.backfillNodeUri")
 
         twinPairsWithNameMatchedNodePairTuplesDS
-            .filter(resolvedTwinPair)
             .select(
-              explode(col("nameMatchedNodePairTuples").getItem(0)).as("nameMatchedNodePair"), // <-- the one tuple of a resolved twin pair
+              explode(flatten(col("nameMatchedNodePairTuples"))).as("nameMatchedNodePair"), // <-- every tuple, both of them under rule C3
               col("forwardCanonicalId"),
               col("backfillCanonicalId"),
               col("nonIdenticalTwinsAlsoWithinForwardFlow")
@@ -407,10 +406,10 @@ object DataOps:
     /**
      * ==Step 5: each homonymous node pair once, with its number of twin pairs, the global table==
      *
-     * One row is one homonymous node pair across all resolved twin pairs. `nonIdenticalTwinPairCount` is the number of distinct twin pairs that give
-     * the node pair, each twin pair identified by forwardCanonicalId and backfillCanonicalId together. A twin pair that gives the same node pair
-     * twice counts once. Each node has exactly one name (section 4.3 of BioMed Knowledge Graph (Graph) Data Model), so the node pair fixes
-     * matchedNodeName, and grouping on it as well does not change the groups.
+     * One row is one homonymous node pair across all twin pairs. `nonIdenticalTwinPairCount` is the number of distinct twin pairs that give the node
+     * pair, each twin pair identified by forwardCanonicalId and backfillCanonicalId together. A twin pair that gives the same node pair twice counts
+     * once. Each node has exactly one name (section 4.3 of BioMed Knowledge Graph (Graph) Data Model), so the node pair fixes matchedNodeName, and
+     * grouping on it as well does not change the groups.
      *
      * Columns: forwardNodeUri, backfillNodeUri, matchedNodeName, nonIdenticalTwinPairCount. One row has the fields of
      * [[DataTypes.HomonymousNodePairWithTwinCount]].
@@ -422,19 +421,3 @@ object DataOps:
             .groupBy(col("forwardNodeUri"), col("backfillNodeUri"), col("matchedNodeName"))
             .agg(countDistinct(col("forwardCanonicalId"), col("backfillCanonicalId")).as("nonIdenticalTwinPairCount"))
             .enforceAs[HomonymousNodePairWithTwinCount](to_json(struct(col("forwardNodeUri"), col("backfillNodeUri"))))
-
-    /**
-     * ==Step 5: the unresolved twin pairs==
-     *
-     * The twin pairs of rule C3, with their two possible answers in `nameMatchedNodePairTuples`. The first is the straight answer, in which
-     * forward-flow node 1 goes with backfill node 1, and forward-flow node 2 goes with backfill node 2. The second is the crossed answer, in which
-     * forward-flow node 1 goes with backfill node 2, and forward-flow node 2 goes with backfill node 1.
-     *
-     * Columns: forwardCanonicalId, backfillCanonicalId, nameMatchedNodePairTuples.
-     */
-    def computeTwinPairsWithMultipleNameMatchedNodePairTuples(twinPairsWithNameMatchedNodePairTuplesDS: Dataset[TwinPairWithNameMatchedNodePairTuples]): DataFrame =
-        val unresolvedTwinPair = size(col("nameMatchedNodePairTuples")) === 2 // <-- rule C3 keeps both possible answers
-
-        twinPairsWithNameMatchedNodePairTuplesDS
-            .filter(unresolvedTwinPair)
-            .select(col("forwardCanonicalId"), col("backfillCanonicalId"), col("nameMatchedNodePairTuples"))

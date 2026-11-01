@@ -1,6 +1,6 @@
 # The twin search of BIOMED-3471
 
-The twin search answers this question: how many non-identical twins are there between the forward flow and the backfill because one or both of their nodes are homonyms? It also finds the homonymous node pairs behind them.
+The twin search answers this question: how many non-identical twins are there between the forward flow and the backfill because one or both of their nodes are homonyms? It also finds the homonymous node pairs behind them, and lists each one with the twin pairs it appears in.
 
 ## The problem, on one example
 
@@ -68,7 +68,7 @@ A twin pair is one pair of non-identical twins that the twin search finds. It ho
 
 A twin pair is flagged when its backfill twin is also supported by forward-flow relation occurrences. The forward flow then states the relation on both homonyms, so the two canonical relations are non-identical twins within the forward flow as well. The column `nonIdenticalTwinsAlsoWithinForwardFlow` holds this flag. The luteolin twin pair is flagged.
 
-A homonymous node pair is a node of the forward-flow relation and the node of the backfill twin that goes with it, when the two are different nodes with the same normalized name. Each twin pair has one or two homonymous node pairs, because the forward-flow relation has two nodes, and at least one of them goes with a backfill node other than itself. Step 5 reports them only for the twin pairs where it can decide which forward-flow node goes with which backfill node. One homonymous node pair can be behind many twin pairs. In the run of 23 October 2026, the two luteolin nodes are behind 66 twin pairs.
+A homonymous node pair is a node of the forward-flow relation and a node that the backfill twin holds in its place, when the two are different nodes with the same normalized name. Except in one case, a twin pair gives one or two homonymous node pairs, because the forward-flow relation has two nodes, and the backfill twin holds a homonym in place of at least one of them. It gives four when its relation type is undirected and its four nodes are four different nodes with the same normalized name. All four are then homonyms of one another, and each backfill node can stand in place of either forward-flow node, so each forward-flow node forms a homonymous node pair with each backfill node. One homonymous node pair can be behind many twin pairs. In the run of 23 October 2026, the two luteolin nodes are behind 66 twin pairs.
 
 ## The input: a list of relation occurrences
 
@@ -104,10 +104,9 @@ relation occurrences
   step 2   folds the relation occurrences into canonical relations         canonicalRelations
   step 3   builds the name key of each canonical relation
   step 4   matches each forward-only canonical relation on its name key    nonIdenticalTwinPairs
-  step 5   decides which forward-flow node goes with which backfill node   twinPairsWithNameMatchedNodePairTuples
-           keeps the homonymous node pairs of each resolved twin pair      homonymousNodePairsPerTwinPair
+  step 5   pairs the nodes of each twin pair by normalized name            twinPairsWithNameMatchedNodePairTuples
+           keeps the homonymous node pairs of each twin pair               homonymousNodePairsPerTwinPair
            counts the twin pairs that give each homonymous node pair       twinPairCountPerHomonymousNodePair
-           keeps the twin pairs for which it cannot decide                 twinPairsWithMultipleNameMatchedNodePairTuples
 ```
 
 Steps 1 and 2 turn the relation occurrences into canonical relations. Steps 3 and 4 find the twin pairs. Step 5 finds the homonymous node pairs inside each twin pair.
@@ -172,11 +171,11 @@ One forward-only canonical relation can have several backfill twins. The number 
 
 Each row also holds the two canonical relations of the twin pair, in the columns `forwardTwin` and `backfillTwin`. Each of them holds one row of `canonicalRelations`, with one field for each column of that table: the canonical relation ID, the relation type, the direction, the two node URNs in the order of the ID, their names as the input gives them, and `sources`.
 
-### Step 5: which forward-flow node goes with which backfill node
+### Step 5: the homonymous node pairs of each twin pair
 
-In a twin pair, each node of the forward-flow relation goes with a node of the backfill twin that has the same normalized name. In a directed relation, the roles decide: the regulator goes with the regulator, and the target goes with the target.
+Step 5 finds the homonymous node pairs of each twin pair. Each one is a forward-flow node together with a homonym of it that the backfill twin holds in its place. In a twin pair, each node of the forward-flow relation goes with a node of the backfill twin that has the same normalized name, and each such pair of nodes with different node URNs is a homonymous node pair. In a directed relation, the roles tell which nodes go together: the regulator goes with the regulator, and the target goes with the target.
 
-For an undirected relation such as Binding, both nodes have the role partner, so the roles cannot decide. The positions cannot decide either. A position is the place of a node in the canonical relation ID. The ID lists the node TERMite IDs of the two partners in lexicographic order (section 2.2), so a position only says whether a node TERMite ID sorts first. When the two relations of a twin pair have different node TERMite IDs for the same normalized name, that name can be at position 1 in one relation and at position 2 in the other.
+For an undirected relation such as Binding, both nodes have the role partner, so the roles cannot tell which nodes go together. The positions cannot tell either. A position is the place of a node in the canonical relation ID. The ID lists the node TERMite IDs of the two partners in lexicographic order (section 2.2), so a position only says whether a node TERMite ID sorts first. When the two relations of a twin pair have different node TERMite IDs for the same normalized name, that name can be at position 1 in one relation and at position 2 in the other.
 
 The collagen twin pair shows this. As step 1 showed, collagen is the first partner of the forward-flow relation and the second partner of the backfill twin, because its two node TERMite IDs sort differently:
 
@@ -192,10 +191,10 @@ The MIA3 node has the same node TERMite ID in both relations, and the two collag
 
 Step 5 uses these terms:
 
-- A name-matched node pair is a forward-flow node and a backfill node whose normalized names are the same. Step 5 stores it as `{role, forwardNodeUri, backfillNodeUri, matchedNodeName}`. The four fields hold, in order, the role of both nodes, the node URN of the forward-flow node, the node URN of the backfill node, and the normalized name that both nodes share.
+- A name-matched node pair is a node of the forward-flow relation and a node that the backfill twin holds in its place. The two nodes always have the same normalized name. Step 5 stores it as `{role, forwardNodeUri, backfillNodeUri, matchedNodeName}`. The four fields hold, in order, the role of both nodes, the node URN of the forward-flow node, the node URN of the backfill node, and the normalized name that both nodes share.
 - An identical node pair is a name-matched node pair whose forward-flow node and backfill node have the same node URN. A homonymous node pair is a name-matched node pair whose forward-flow node and backfill node have different node URNs.
-- A name-matched node pair tuple is a pairing of the two nodes of the forward-flow relation with the two nodes of its backfill twin, in which each forward-flow node goes with a backfill node of the same normalized name. It holds two name-matched node pairs, the one of forward-flow node 1 first and the one of forward-flow node 2 second.
-- A twin pair is resolved when step 5 can decide which forward-flow node goes with which backfill node, and unresolved when it cannot.
+- A name-matched node pair tuple is one way to pair the two nodes of the forward-flow relation with the two nodes of its backfill twin, in which each forward-flow node goes with a node that the backfill twin holds in its place. It holds two name-matched node pairs, the one of forward-flow node 1 first and the one of forward-flow node 2 second.
+- The straight tuple puts forward-flow node 1 with backfill node 1, and forward-flow node 2 with backfill node 2. The crossed tuple puts forward-flow node 1 with backfill node 2, and forward-flow node 2 with backfill node 1.
 
 Step 5 relies on three guarantees:
 
@@ -207,13 +206,13 @@ A node appears in both relations when the forward-flow relation and the backfill
 
 Step 5 applies the first of these rules that fits:
 
-| Rule | When the rule applies | Which forward-flow node goes with which backfill node |
+| Rule | When the rule applies | How the rule pairs the nodes |
 |---|---|---|
 | A | The relation is directed. | The forward-flow regulator goes with the backfill regulator, and the forward-flow target goes with the backfill target. The name key already holds their normalized names in role order, so step 5 tests no name. |
 | B | The relation is undirected, and its two nodes have different normalized names. | Each forward-flow node goes with the backfill node that has the same normalized name. |
 | C1 | The relation is undirected, its two nodes have the same normalized name, and a node appears in both relations. | That node goes with itself, and the other forward-flow node goes with the other backfill node. |
 | C2 | The relation is undirected, its two nodes have the same normalized name, no node appears in both relations, and at least one relation holds the same node twice. | Every node of the other relation goes with that node. When both relations hold a node twice, the two repeated nodes go with each other. |
-| C3 | The relation is undirected, its two nodes have the same normalized name, no node appears in both relations, and neither relation holds the same node twice. | The four nodes are different nodes with the same normalized name. Each forward-flow node goes with one of its two homonyms in the backfill twin, but step 5 cannot decide which one. The twin pair is unresolved, step 5 keeps both possible answers, and it reports no homonymous node pair. |
+| C3 | The relation is undirected, its two nodes have the same normalized name, no node appears in both relations, and neither relation holds the same node twice. | The four nodes are different nodes with the same normalized name, so all four are homonyms of one another, which is what step 5 looks for, and each backfill node can stand in place of either forward-flow node. So step 5 takes both tuples, and the homonymous node pairs are all four node pairs, each forward-flow node with each backfill node. |
 
 These are the results for the two examples, as Spark prints them. The luteolin twin pair falls under rule A, and the collagen twin pair falls under rule B, with its names in reverse order in the backfill twin.
 
@@ -242,12 +241,11 @@ rule C3   forward-flow relation E1, E2   backfill twin E3, E4   [[{partner, E1, 
                                                                  [{partner, E1, E4, egfr}, {partner, E2, E3, egfr}]]
 ```
 
-Step 5 writes four tables from these results:
+Step 5 writes three tables from these results:
 
-- `twinPairsWithNameMatchedNodePairTuples` holds every twin pair with its result in `nameMatchedNodePairTuples`: one tuple when the twin pair is resolved, and the two possible answers when it is unresolved.
-- `homonymousNodePairsPerTwinPair`, the detail table, holds the homonymous node pairs of each resolved twin pair, one entry each, with the role at which the twin pair gives them. Identical node pairs are left out. Repeated entries stay: a twin pair in which both relations hold a node twice gives the same homonymous node pair twice.
+- `twinPairsWithNameMatchedNodePairTuples` holds every twin pair with the tuples that rules A to C take, in `nameMatchedNodePairTuples`: one tuple, or the straight and the crossed tuple under rule C3.
+- `homonymousNodePairsPerTwinPair`, the detail table, holds one entry each time a twin pair gives a homonymous node pair, with the role at which the twin pair gives it. Identical node pairs are left out. A twin pair of rule C3 gives four entries. Repeated entries stay: a twin pair in which both relations hold a node twice gives the same homonymous node pair twice.
 - `twinPairCountPerHomonymousNodePair`, the global table, holds each homonymous node pair once, with `nonIdenticalTwinPairCount`, the number of distinct twin pairs that give it.
-- `twinPairsWithMultipleNameMatchedNodePairTuples` holds the unresolved twin pairs with their two possible answers. In the first answer, node 1 of the forward-flow relation goes with node 1 of the backfill twin, and node 2 goes with node 2. In the second, node 1 goes with node 2, and node 2 goes with node 1.
 
 For the two examples, the detail table holds one entry each, and the global table counts the twin pairs that give each homonymous node pair:
 
@@ -258,24 +256,22 @@ For the two examples, the detail table holds one entry each, and the global tabl
 
 ## The results
 
-### The six tables
+### The five tables
 
 | Table | What one row holds | Columns |
 |---|---|---|
 | `canonicalRelations` | Each row holds one canonical relation. | canonicalId, relationship_type, direction, node1_urn, node1_name, node2_urn, node2_name, sources |
 | `nonIdenticalTwinPairs` | Each row holds one twin pair. | forwardCanonicalId, backfillCanonicalId, nonIdenticalTwinsAlsoWithinForwardFlow, forwardTwin, backfillTwin |
-| `twinPairsWithNameMatchedNodePairTuples` | Each row holds one twin pair with the result of step 5. | the five columns of `nonIdenticalTwinPairs`, then nameMatchedNodePairTuples |
-| `homonymousNodePairsPerTwinPair`, the detail table | Each row holds one homonymous node pair of one resolved twin pair. | forwardNodeUri, backfillNodeUri, matchedNodeName, role, forwardCanonicalId, backfillCanonicalId, nonIdenticalTwinsAlsoWithinForwardFlow |
+| `twinPairsWithNameMatchedNodePairTuples` | Each row holds one twin pair with its name-matched node pair tuples. | the five columns of `nonIdenticalTwinPairs`, then nameMatchedNodePairTuples |
+| `homonymousNodePairsPerTwinPair`, the detail table | Each row holds one homonymous node pair of one twin pair. | forwardNodeUri, backfillNodeUri, matchedNodeName, role, forwardCanonicalId, backfillCanonicalId, nonIdenticalTwinsAlsoWithinForwardFlow |
 | `twinPairCountPerHomonymousNodePair`, the global table | Each row holds one homonymous node pair, with the number of twin pairs that give it. | forwardNodeUri, backfillNodeUri, matchedNodeName, nonIdenticalTwinPairCount |
-| `twinPairsWithMultipleNameMatchedNodePairTuples` | Each row holds one unresolved twin pair. | forwardCanonicalId, backfillCanonicalId, nameMatchedNodePairTuples |
 
-### The five numbers printed at the end
+### The four numbers printed at the end
 
 | Printed name | What it counts |
 |---|---|
 | `twinPairCount` | It counts the twin pairs. |
 | `forwardOnlyCanonicalRelationTwinCount` | It counts the forward-only canonical relations with at least one non-identical twin. |
-| `unresolvedTwinPairCount` | It counts the unresolved twin pairs. |
 | `homonymousNodePairsPerTwinPairCount` | It counts the rows of the detail table. |
 | `homonymousNodePairCount` | It counts the homonymous node pairs, each one once. |
 
@@ -285,8 +281,8 @@ For the two examples, the detail table holds one entry each, and the global tabl
 |---|---|
 | `DataTypes.scala` | It holds the data model of the twin search: the input row `RelationOccurrence`, the canonical relation rows `CanonicalRelation` and `CanonicalRelationWithNameKey`, the name key `CanonicalRelationNameKey`, the twin pair row `TwinPairRecord` that step 4 writes in `nonIdenticalTwinPairs`, the `source` and `direction` values, the three roles, the name-matched node pair `NameMatchedNodePair` that step 5 stores, the name-matched node pair tuple `NameMatchedNodePairTuple`, the row `TwinPairWithNameMatchedNodePairTuples` of `twinPairsWithNameMatchedNodePairTuples`, the homonymous node pair row `HomonymousNodePairWithTwinPair` that step 5 writes in the detail table, and `HomonymousNodePairWithTwinCount`, one row of the global table. |
 | `DataOps.scala` | It holds the five steps, each documented next to its code. |
-| `TwinSearchApp.scala` | It reads the relation occurrences, runs the five steps, writes the six tables and prints the five numbers. |
-| `TwinSearchTestCases.scala` | It runs the five steps on 14 small lists of relation occurrences, with at least one for each rule of step 5, and compares each result with the expected one. |
+| `TwinSearchApp.scala` | It reads the relation occurrences, runs the five steps, writes the five tables and prints the four numbers. |
+| `TwinSearchTestCases.scala` | It runs the five steps on 14 small lists of relation occurrences, with at least one for each rule of step 5, and checks that the steps find the expected twin pair and its homonymous node pairs. |
 
 ## How to run
 
@@ -297,4 +293,4 @@ scala-cli run . --main-class biomed3471.claude.TwinSearchTestCases --java-opt -X
 scala-cli run . --main-class biomed3471.claude.TwinSearchApp --java-opt -Xmx4g -- 2026-10-23
 ```
 
-The only argument of TwinSearchApp is the run name. It names the folder under `s3://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/` where the six tables are written, and a table that already exists there is replaced. TwinSearchApp reads the relation occurrences from the value `relationOccurrencePath` at the top of `main`. To run the twin search on another list of relation occurrences, change that value.
+The only argument of TwinSearchApp is the run name. It names the folder under `s3://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/` where the five tables are written, and a table that already exists there is replaced. TwinSearchApp reads the relation occurrences from the value `relationOccurrencePath` at the top of `main`. To run the twin search on another list of relation occurrences, change that value.

@@ -14,10 +14,10 @@ import scala.util.chaining.scalaUtilChainingOps
 /**
  * ==The twin search of BIOMED-3471==
  *
- * The twin search counts the forward-only canonical relations that have a non-identical twin among the canonical relations with a backfill relation
- * occurrence. A forward-only canonical relation has a non-identical twin when the backfill states the same relation type between nodes with the same
- * normalized names, but with a homonym in place of one or both of its nodes. The twin search then finds the homonymous node pairs behind these
- * non-identical twins.
+ * The twin search counts the forward-only canonical relations that have a non-identical twin among the canonical relations supported by at least one
+ * backfill relation occurrence. A forward-only canonical relation has a non-identical twin when the backfill states the same relation type between
+ * nodes with the same normalized names, but with a homonym in place of one or both of its nodes. The twin search then finds the homonymous node pairs
+ * behind these non-identical twins, and lists each one with the twin pairs it appears in.
  *
  * The twin search uses these terms:
  *
@@ -38,30 +38,30 @@ import scala.util.chaining.scalaUtilChainingOps
  *   - Two canonical relations are non-identical twins when they have the same name key but different canonical relation IDs. A twin pair is one pair
  *     of non-identical twins that the twin search finds. It holds a forward-flow relation, which is a forward-only canonical relation, and a backfill
  *     twin, which is a canonical relation supported by at least one backfill relation occurrence.
- *   - In step 5, each node of the forward-flow relation goes with a node of the backfill twin that has the same normalized name, by rules A to C of
- *     [[DataOps.nameMatchedNodePairTuples]]. A homonymous node pair is a forward-flow node and the backfill node that goes with it, when the two have
- *     different node URNs. A twin pair is resolved when the rules decide which forward-flow node goes with which backfill node, and unresolved when
- *     they cannot.
+ *   - A homonymous node pair is a node of the forward-flow relation and a node that the backfill twin holds in its place, when the two have the same
+ *     normalized name but different node URNs. Step 5 finds them with rules A to C of [[DataOps.nameMatchedNodePairTuples]], which pair each
+ *     forward-flow node with a backfill node of the same normalized name. When the relation type of a twin pair is undirected and its four nodes are
+ *     four different nodes with the same normalized name, all four are homonyms of one another, and each backfill node can stand in place of either
+ *     forward-flow node, so the twin pair gives four homonymous node pairs, each forward-flow node with each backfill node.
  *
  * TwinSearchApp reads the relation occurrences from the input and runs the five steps of [[DataOps]] in order. Steps 1 and 2 turn the relation
  * occurrences into canonical relations, steps 3 and 4 find the twin pairs, and step 5 finds the homonymous node pairs in each twin pair. The results
- * of steps 2, 4 and 5 are saved in six Delta tables:
+ * of steps 2, 4 and 5 are saved in five Delta tables:
  *
  *   - Step 1 builds the canonical relation ID of each relation occurrence.
  *   - Step 2 combines the relation occurrences of each canonical relation into one row. These rows are saved in `canonicalRelations`.
  *   - Step 3 adds a name key to each canonical relation.
  *   - Step 4 matches each forward-only canonical relation with every canonical relation that is supported by a backfill relation occurrence and has
  *     the same name key. Each match is a twin pair, and the twin pairs are saved in `nonIdenticalTwinPairs`.
- *   - Step 5 decides, in each twin pair, which forward-flow node goes with which backfill node. Its results are saved in four tables:
- *     - `twinPairsWithNameMatchedNodePairTuples` holds every twin pair with the result of rules A to C. The result is one answer for a resolved twin
- *       pair, and the two possible answers for an unresolved one.
- *     - `homonymousNodePairsPerTwinPair` holds the homonymous node pairs of each resolved twin pair.
+ *   - Step 5 finds the homonymous node pairs of each twin pair. Its results are saved in three tables:
+ *     - `twinPairsWithNameMatchedNodePairTuples` holds every twin pair with the result of rules A to C: one way to pair its nodes, or both ways when
+ *       its relation type is undirected and its four nodes are four different nodes with the same normalized name.
+ *     - `homonymousNodePairsPerTwinPair` holds the homonymous node pairs of each twin pair.
  *     - `twinPairCountPerHomonymousNodePair` holds each homonymous node pair once, with the number of twin pairs that give it.
- *     - `twinPairsWithMultipleNameMatchedNodePairTuples` holds the unresolved twin pairs.
  *
  * Each table is read back after it is written, so that the next step starts from the saved table instead of computing the earlier steps again from
- * the input. At the end, TwinSearchApp prints five numbers: the twin pairs, the forward-only canonical relations with at least one non-identical
- * twin, the unresolved twin pairs, the entries of homonymousNodePairsPerTwinPair, and the homonymous node pairs.
+ * the input. At the end, TwinSearchApp prints four numbers: the twin pairs, the forward-only canonical relations with at least one non-identical
+ * twin, the entries of homonymousNodePairsPerTwinPair, and the homonymous node pairs.
  *
  * Run it from the spark-playground root with a 4 GB heap. The only argument names the run folder under
  * `s3://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/`, and a table that already exists there is replaced.
@@ -112,17 +112,16 @@ object TwinSearchApp:
         val relationOccurrencePath = "s3a://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/wytze-relation-occurrences-delta"
         val runPath                = s"s3a://cmdp-biomed-lakehouse-bucket-dev/d_okouya/BIOMED-3471/${args(0)}"
 
-        val canonicalRelationsPath                             = s"$runPath/canonicalRelations"
-        val nonIdenticalTwinPairsPath                          = s"$runPath/nonIdenticalTwinPairs"
-        val twinPairsWithNameMatchedNodePairTuplesPath         = s"$runPath/twinPairsWithNameMatchedNodePairTuples"
-        val homonymousNodePairsPerTwinPairPath                 = s"$runPath/homonymousNodePairsPerTwinPair"
-        val twinPairCountPerHomonymousNodePairPath             = s"$runPath/twinPairCountPerHomonymousNodePair"
-        val twinPairsWithMultipleNameMatchedNodePairTuplesPath = s"$runPath/twinPairsWithMultipleNameMatchedNodePairTuples"
+        val canonicalRelationsPath                     = s"$runPath/canonicalRelations"
+        val nonIdenticalTwinPairsPath                  = s"$runPath/nonIdenticalTwinPairs"
+        val twinPairsWithNameMatchedNodePairTuplesPath = s"$runPath/twinPairsWithNameMatchedNodePairTuples"
+        val homonymousNodePairsPerTwinPairPath         = s"$runPath/homonymousNodePairsPerTwinPair"
+        val twinPairCountPerHomonymousNodePairPath     = s"$runPath/twinPairCountPerHomonymousNodePair"
 
         val relationOccurrenceDS = spark
             .read
             .delta(relationOccurrencePath)
-            .enforceAs[RelationOccurrence](lit(null))
+            .enforceAs[RelationOccurrence](lit("unavailable")) // <-- a relation occurrence has no ID in the input
 
         // Steps 1 and 2
         val canonicalRelationsDS = relationOccurrenceDS
@@ -152,10 +151,6 @@ object TwinSearchApp:
             .pipe { ds => writeAndReadBackDeltaTable(ds.toDF(), twinPairCountPerHomonymousNodePairPath) }
             .enforceAs[HomonymousNodePairWithTwinCount](to_json(struct($"forwardNodeUri", $"backfillNodeUri")))
 
-        val twinPairsWithMultipleNameMatchedNodePairTuplesDF = twinPairsWithNameMatchedNodePairTuplesDS
-            .pipe { computeTwinPairsWithMultipleNameMatchedNodePairTuples }
-            .pipe { df => writeAndReadBackDeltaTable(df, twinPairsWithMultipleNameMatchedNodePairTuplesPath) }
-
         val forwardOnlyCanonicalRelationTwinCount = nonIdenticalTwinPairsDS
             .select($"forwardCanonicalId")
             .distinct()
@@ -163,7 +158,6 @@ object TwinSearchApp:
 
         println(s"twinPairCount=${nonIdenticalTwinPairsDS.count()}")
         println(s"forwardOnlyCanonicalRelationTwinCount=$forwardOnlyCanonicalRelationTwinCount")
-        println(s"unresolvedTwinPairCount=${twinPairsWithMultipleNameMatchedNodePairTuplesDF.count()}")
         println(s"homonymousNodePairsPerTwinPairCount=${homonymousNodePairsPerTwinPairDS.count()}")
         println(s"homonymousNodePairCount=${twinPairCountPerHomonymousNodePairDS.count()}")
 

@@ -27,10 +27,6 @@ import scala.util.chaining.scalaUtilChainingOps
  * several nodes in canonicalRelations, no twin pair   the name is a duplicate in the input, but it creates no twin pair
  * }}}
  *
- * twinPairCountPerHomonymousNodePair holds the homonymous node pairs of the resolved twin pairs only. It leaves out the
- * unresolved twin pairs, in which the twin search cannot decide which forward-flow node goes with which backfill node. So
- * the group `several nodes in canonicalRelations, no twin pair` also holds a name that creates only unresolved twin pairs.
- *
  * DuplicateNamesApp reads canonicalRelations and twinPairCountPerHomonymousNodePair of the twin search run 2026-10-31, and
  * writes one row for each name of the list in duplicateNamesWithGroup, in the same run folder. At the end, it prints the
  * number of names in each group and in total.

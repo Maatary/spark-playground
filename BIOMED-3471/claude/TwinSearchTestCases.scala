@@ -12,18 +12,18 @@ import scala.util.chaining.scalaUtilChainingOps
  * == The test cases of the twin search ==
  *
  * Each test case is a few relation occurrences whose canonical relations form one twin pair. TwinSearchTestCases runs steps
- * 1 to 5 of [[DataOps]] on each test case on its own. It prints what the steps must find next to what they find: the twin
- * pair with its two canonical relation IDs and its flag nonIdenticalTwinsAlsoWithinForwardFlow, its
- * nameMatchedNodePairTuples as Spark prints them, the entries of homonymousNodePairsPerTwinPair, the rows of
- * twinPairCountPerHomonymousNodePair, and the number of unresolved twin pairs.
+ * 1 to 5 of [[DataOps]] on each test case on its own, and checks that the steps find the twin pair and its homonymous node
+ * pairs. It prints what the steps must find next to what they find: the twin pair with its two canonical relation IDs and
+ * its flag nonIdenticalTwinsAlsoWithinForwardFlow, its nameMatchedNodePairTuples as Spark prints them, the entries of
+ * homonymousNodePairsPerTwinPair, and the rows of twinPairCountPerHomonymousNodePair.
  *
  * The first nine test cases give at least one example of each rule, A to C, and they include the seven examples in the
  * Scaladoc of [[DataOps.nameMatchedNodePairTuples]]. P1, P2, P3 and P4 are protein nodes named insulin or INSR. E1, E2, E3
  * and E4 are four different protein nodes named EGFR, in the order of their node TERMite IDs. N1 and N2 are two more protein
  * nodes named EGFR, and in test case 9 each relation is a Regulation from one of them to itself. The last five test cases
  * show what the first nine do not: rule B with the names in the same order in both relations, names that differ only in
- * letter case and in spaces at their ends, a node that appears in both relations at position 2 of the forward-flow relation,
- * and a backfill twin that is also supported by forward-flow relation occurrences.
+ * letter case and in spaces at their ends, rule C1 with a node that appears in both relations only at position 2 of the
+ * forward-flow relation, and a backfill twin that is also supported by forward-flow relation occurrences.
  *
  * {{{
  * scala-cli run . --main-class biomed3471.claude.TwinSearchTestCases --java-opt -Xmx4g
@@ -40,8 +40,8 @@ object TwinSearchTestCases:
     )
 
     /**
-     * One row of twinPairsWithNameMatchedNodePairTuples without the columns `forwardTwin` and `backfillTwin`, with
-     * nameMatchedNodePairTuples as Spark prints it.
+     * One twin pair as the test cases print it. It holds the two canonical relation IDs, the flag nonIdenticalTwinsAlsoWithinForwardFlow, and
+     * nameMatchedNodePairTuples written as the text that Spark prints.
      */
     case class TwinPairAsPrinted(
         forwardCanonicalId: String,
@@ -57,8 +57,7 @@ object TwinSearchTestCases:
     case class TestCaseResult(
         twinPairs: List[TwinPairAsPrinted],
         homonymousNodePairsPerTwinPair: List[NameMatchedNodePair],
-        twinPairCountPerHomonymousNodePair: List[HomonymousNodePairWithTwinCount],
-        unresolvedTwinPairCount: Long
+        twinPairCountPerHomonymousNodePair: List[HomonymousNodePairWithTwinCount]
     )
 
     Logger.root
@@ -94,13 +93,12 @@ object TwinSearchTestCases:
             .mkString("[", ", ", "]")
 
     /**
-     * The entries that homonymousNodePairsPerTwinPair must hold for a twin pair: the homonymous node pairs of its one tuple, or none when it is
-     * unresolved.
+     * The entries that homonymousNodePairsPerTwinPair must hold for a twin pair: the homonymous node pairs of all its tuples. Under rule C3, the
+     * four nodes are homonyms of one another, and each backfill node can stand in place of either forward-flow node, so these are all four node
+     * pairs, each forward-flow node with each backfill node.
      */
     def homonymousNodePairsPerTwinPairOf(nameMatchedNodePairTuples: List[List[NameMatchedNodePair]]): List[NameMatchedNodePair] =
-        nameMatchedNodePairTuples match
-            case List(nameMatchedNodePairTuple) => nameMatchedNodePairTuple.filter { nodePair => nodePair.forwardNodeUri != nodePair.backfillNodeUri }
-            case _                              => Nil
+        nameMatchedNodePairTuples.flatten.filter { nodePair => nodePair.forwardNodeUri != nodePair.backfillNodeUri }
 
     def describeRelationOccurrence(relationOccurrence: RelationOccurrence): String =
         List(
@@ -168,11 +166,7 @@ object TwinSearchTestCases:
                 .toList
                 .sortBy { nodePairWithTwinCount => (nodePairWithTwinCount.forwardNodeUri, nodePairWithTwinCount.backfillNodeUri) }
 
-        val unresolvedTwinPairCount =
-            computeTwinPairsWithMultipleNameMatchedNodePairTuples(twinPairsWithNameMatchedNodePairTuplesDS)
-                .count()
-
-        TestCaseResult(twinPairs, homonymousNodePairsPerTwinPair, twinPairCountPerHomonymousNodePair, unresolvedTwinPairCount)
+        TestCaseResult(twinPairs, homonymousNodePairsPerTwinPair, twinPairCountPerHomonymousNodePair)
 
     /** What steps 1 to 5 must find for the twin pair that a test case must give. */
     def expectedResultOf(expectedTwinPair: ExpectedTwinPair): TestCaseResult =
@@ -195,9 +189,7 @@ object TwinSearchTestCases:
                 .map { nodePair => HomonymousNodePairWithTwinCount(nodePair.forwardNodeUri, nodePair.backfillNodeUri, nodePair.matchedNodeName, 1L) }
                 .distinct
 
-        val unresolvedTwinPairCount = if expectedTwinPair.nameMatchedNodePairTuples.size == 2 then 1L else 0L
-
-        TestCaseResult(twinPairs, homonymousNodePairsPerTwinPair, twinPairCountPerHomonymousNodePair, unresolvedTwinPairCount)
+        TestCaseResult(twinPairs, homonymousNodePairsPerTwinPair, twinPairCountPerHomonymousNodePair)
 
     /** Prints one test case: its relation occurrences, then each result that the steps must find next to what they find. */
     def printTestCase(testCaseNumber: Int, testCase: TestCase, expected: TestCaseResult, found: TestCaseResult, passed: Boolean): Unit =
@@ -221,7 +213,6 @@ object TwinSearchTestCases:
             expected.twinPairCountPerHomonymousNodePair.map(describeHomonymousNodePairWithTwinCount),
             found.twinPairCountPerHomonymousNodePair.map(describeHomonymousNodePairWithTwinCount)
         )
-        printExpectedAndFound("unresolved twin pairs", List(expected.unresolvedTwinPairCount.toString), List(found.unresolvedTwinPairCount.toString))
         println(if passed then "    passed" else "    FAILED")
         println()
 
@@ -376,7 +367,7 @@ object TwinSearchTestCases:
             ),
             TestCase(
                 rule                = "C3",
-                description         = "each relation holds two different nodes, and no node appears in both relations",
+                description         = "each relation holds two different nodes, and no node appears in both relations, so all four are homonyms",
                 relationOccurrences = List(
                     egfrBindingOccurrence(ForwardFlowSource, "E1", "E2"),
                     egfrBindingOccurrence(BackfillSource, "E3", "E4")
