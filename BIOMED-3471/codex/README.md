@@ -257,6 +257,22 @@ The two luteolin entries link one homonymous node pair to two twin pairs. The do
 
 Pure operations live in the operations modules; data declarations remain behavior-free. Transformations use built-in Spark expressions.
 
+## Current saved run
+
+The `2026-11-01` run completed from commit `6877898` with exit status 0 at 18:53 UTC, taking 7 minutes 46 seconds. It used a 4 GiB heap and eight shuffle partitions. All five tables committed beneath `s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/2026-11-01/`:
+
+| Stored table | Committed row count |
+|---|---:|
+| `canonicalRelations` | 15,060,586 |
+| `nonIdenticalTwinPairs` | 1,911 |
+| `twinPairsWithNameMatchedNodePairs` | 1,911 |
+| `homonymousNodePairsPerTwinPair` | 1,942 |
+| `twinPairCountPerHomonymousNodePair` | 157 |
+
+These counts come from the initial Delta commits and match the previous run's corresponding counts. Verification confirmed the flat `nameMatchedNodePairs` schema, unchanged schemas for the other four tables, and the presence and recorded sizes of every referenced data file. The shared input was unchanged. No fixture suite or saved-output regression was run as part of this execution.
+
+The previous `2026-10-31` output prefix was removed before this run. `ExploreApp` now reads the `2026-11-01` twin pairs.
+
 ## Historical validation
 
 Historical validation on 30 October 2026 passed 20 explicit twin-pair fixtures, equivalence with the then-present deprecated implementation, source selections, empty/unresolved subsets, schemas and distinct twin-pair counts. That suite checked this implementation's forward-position order and the deprecated implementation's order by node URN separately.
@@ -286,14 +302,14 @@ With no arguments, `StepFiveChecks` runs the local fixtures, comparing the imple
 
 The suite covers flat arrays of two or four node-pair records, repeated records, retained canonical relations and flags, roles, stored order, exact field/type/column order, detailed entries and distinct twin-pair counts. Fixtures cover all four undirected cases, directed roles, self-reference on either or both sides, every shared-node position, name matching across capitalization and leading/trailing spaces and node-URN identity across node types. The four-distinct-node cases check all four pairs and their inclusion in the detail and counts.
 
-For saved-output regression, replace `YYYY-MM-DD` below with the date of a completed run using the flat `nameMatchedNodePairs` result and five-table layout. The historical `2026-10-31` run uses the earlier format.
+For saved-output regression against the current five-table run:
 
 ```zsh
 scala run . -M biomed3471.codex.StepFiveChecks --java-opt=-Xmx4g -- \
-  --baseline-run YYYY-MM-DD
+  --baseline-run 2026-11-01
 ```
 
-This runs the fixtures and read-only regression in the same Spark session. Regression reads the twin-pair and Step 5 tables and compares node-pair contents, metadata, detail multiplicities and counts.
+This runs the fixtures and read-only regression in the same Spark session. Regression reads the twin-pair and Step 5 tables and compares node-pair contents, metadata, detail multiplicities and counts. Another baseline date must also use the flat `nameMatchedNodePairs` result and five-table layout.
 
 The repository's existing `project.scala` supplies Scala, Spark, Delta, Hadoop/AWS and JVM module options.
 

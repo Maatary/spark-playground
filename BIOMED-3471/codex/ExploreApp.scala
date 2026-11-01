@@ -25,7 +25,7 @@ object ExploreApp:
         val nonIdenticalTwinPairs = spark
             .read
             .format("delta")
-            .load("s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/2026-10-31/nonIdenticalTwinPairs/")
+            .load("s3://cmdp-biomed-lakehouse-bucket-dev/m_okouya/BIOMED-3471/2026-11-01/nonIdenticalTwinPairs/")
             .tap {_.printSchema()}
             .tap{ _.show(10, truncate = false) }
 
