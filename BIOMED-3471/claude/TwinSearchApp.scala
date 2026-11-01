@@ -38,11 +38,12 @@ import scala.util.chaining.scalaUtilChainingOps
  *   - Two canonical relations are non-identical twins when they have the same name key but different canonical relation IDs. A twin pair is one pair
  *     of non-identical twins that the twin search finds. It holds a forward-flow relation, which is a forward-only canonical relation, and a backfill
  *     twin, which is a canonical relation supported by at least one backfill relation occurrence.
- *   - A homonymous node pair is a node of the forward-flow relation and a node that the backfill twin holds in its place, when the two have the same
- *     normalized name but different node URNs. Step 5 finds them with rules A to C of [[DataOps.nameMatchedNodePairTuples]], which pair each
- *     forward-flow node with a backfill node of the same normalized name. When the relation type of a twin pair is undirected and its four nodes are
- *     four different nodes with the same normalized name, all four are homonyms of one another, and each backfill node can stand in place of either
- *     forward-flow node, so the twin pair gives four homonymous node pairs, each forward-flow node with each backfill node.
+ *   - A homonymous node pair is composed of a node connected by a forward-flow relation and a node connected in its place by one of its backfill
+ *     twins. Both nodes have the same normalized name but different node URNs. Step 5 finds them with rules A to C of
+ *     [[DataOps.nameMatchedNodePairTuples]], which pair each forward-flow node with a backfill node of the same normalized name. When the relation
+ *     type of a twin pair is undirected and its four nodes are four different nodes with the same normalized name, all four are homonyms of one
+ *     another, and each backfill node can stand in place of either forward-flow node, so the twin pair connects to four homonymous node pairs, each
+ *     forward-flow node with each backfill node.
  *
  * TwinSearchApp reads the relation occurrences from the input and runs the five steps of [[DataOps]] in order. Steps 1 and 2 turn the relation
  * occurrences into canonical relations, steps 3 and 4 find the twin pairs, and step 5 finds the homonymous node pairs in each twin pair. The results
@@ -57,7 +58,7 @@ import scala.util.chaining.scalaUtilChainingOps
  *     - `twinPairsWithNameMatchedNodePairTuples` holds every twin pair with the result of rules A to C: one way to pair its nodes, or both ways when
  *       its relation type is undirected and its four nodes are four different nodes with the same normalized name.
  *     - `homonymousNodePairsPerTwinPair` holds the homonymous node pairs of each twin pair.
- *     - `twinPairCountPerHomonymousNodePair` holds each homonymous node pair once, with the number of twin pairs that give it.
+ *     - `twinPairCountPerHomonymousNodePair` holds each homonymous node pair once, with the number of twin pairs that connect to it.
  *
  * Each table is read back after it is written, so that the next step starts from the saved table instead of computing the earlier steps again from
  * the input. At the end, TwinSearchApp prints four numbers: the twin pairs, the forward-only canonical relations with at least one non-identical

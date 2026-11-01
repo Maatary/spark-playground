@@ -31,7 +31,7 @@ import scala.util.chaining.scalaUtilChainingOps
  */
 object TwinSearchTestCases:
 
-    /** The twin pair that a test case must give, with its name-matched node pair tuples in the order that step 5 stores them. */
+    /** The expected twin pair of a test case, with its name-matched node pair tuples in the order that step 5 stores them. */
     case class ExpectedTwinPair(
         forwardCanonicalId: String,
         backfillCanonicalId: String,
@@ -50,7 +50,7 @@ object TwinSearchTestCases:
         nameMatchedNodePairTuples: String
     )
 
-    /** One test case: the rule of step 5 that applies, what the test case shows, its relation occurrences, and the twin pair they must give. */
+    /** One test case: the rule of step 5 that applies, what the test case shows, its relation occurrences, and the expected twin pair. */
     case class TestCase(rule: String, description: String, relationOccurrences: List[RelationOccurrence], expectedTwinPair: ExpectedTwinPair)
 
     /** What steps 1 to 5 find for one test case, or what they must find. */
@@ -168,7 +168,7 @@ object TwinSearchTestCases:
 
         TestCaseResult(twinPairs, homonymousNodePairsPerTwinPair, twinPairCountPerHomonymousNodePair)
 
-    /** What steps 1 to 5 must find for the twin pair that a test case must give. */
+    /** What steps 1 to 5 must find for the expected twin pair of a test case. */
     def expectedResultOf(expectedTwinPair: ExpectedTwinPair): TestCaseResult =
         val twinPairs =
             List(
@@ -303,7 +303,7 @@ object TwinSearchTestCases:
             ),
             TestCase(
                 rule                = "C1",
-                description         = "E1 appears in both relations, and the forward-flow relation holds it twice",
+                description         = "E1 appears in both relations, and the forward-flow relation connects it to itself",
                 relationOccurrences = List(
                     egfrBindingOccurrence(ForwardFlowSource, "E1", "E1"),
                     egfrBindingOccurrence(BackfillSource, "E1", "E2")
@@ -319,7 +319,7 @@ object TwinSearchTestCases:
             ),
             TestCase(
                 rule                = "C2",
-                description         = "each relation holds one node twice",
+                description         = "each relation connects a node to itself",
                 relationOccurrences = List(
                     egfrBindingOccurrence(ForwardFlowSource, "E1", "E1"),
                     egfrBindingOccurrence(BackfillSource, "E2", "E2")
@@ -335,7 +335,7 @@ object TwinSearchTestCases:
             ),
             TestCase(
                 rule                = "C2",
-                description         = "the backfill twin holds E3 twice",
+                description         = "the backfill twin connects E3 to itself",
                 relationOccurrences = List(
                     egfrBindingOccurrence(ForwardFlowSource, "E1", "E2"),
                     egfrBindingOccurrence(BackfillSource, "E3", "E3")
@@ -351,7 +351,7 @@ object TwinSearchTestCases:
             ),
             TestCase(
                 rule                = "C2",
-                description         = "the forward-flow relation holds E1 twice",
+                description         = "the forward-flow relation connects E1 to itself",
                 relationOccurrences = List(
                     egfrBindingOccurrence(ForwardFlowSource, "E1", "E1"),
                     egfrBindingOccurrence(BackfillSource, "E2", "E3")
@@ -367,7 +367,7 @@ object TwinSearchTestCases:
             ),
             TestCase(
                 rule                = "C3",
-                description         = "each relation holds two different nodes, and no node appears in both relations, so all four are homonyms",
+                description         = "each relation connects two different nodes, and no node appears in both relations, so all four are homonyms",
                 relationOccurrences = List(
                     egfrBindingOccurrence(ForwardFlowSource, "E1", "E2"),
                     egfrBindingOccurrence(BackfillSource, "E3", "E4")

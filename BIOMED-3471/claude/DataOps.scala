@@ -213,8 +213,8 @@ object DataOps:
      * ==Step 5: the homonymous node pairs of each twin pair==
      *
      * Step 5 finds the homonymous node pairs of each twin pair. The two relations of a twin pair have the same name key but different canonical
-     * relation IDs, so the backfill twin holds a homonym in place of at least one node of the forward-flow relation. To find these homonyms, step 5
-     * pairs each forward-flow node with a backfill node of the same normalized name, and each node pair whose two node URNs differ is a homonymous
+     * relation IDs, so the backfill twin connects a homonym in place of at least one node of the forward-flow relation. To find these homonyms, step
+     * 5 pairs each forward-flow node with a backfill node of the same normalized name, and each node pair whose two node URNs differ is a homonymous
      * node pair. In a directed relation the roles tell which nodes go together. A position is the place of a node in the canonical relation ID: node
      * 1 is at position 1, and node 2 is at position 2. In an undirected relation, such as Binding, the positions do not tell which nodes go together:
      * the canonical relation ID orders the two partners by node TERMite ID, so the same node can be at position 1 in one relation and at position 2
@@ -233,28 +233,28 @@ object DataOps:
      *      the same direction, and the same two normalized names, each the same number of times.
      *   1. The two relations of a twin pair have different canonical relation IDs. The ID is built from the relation type, the roles and the node
      *      TERMite IDs (section 2.2 of BioMed Data Identifier Schemes), and guarantee 2 makes the relation type and the direction the same. So one of
-     *      the two relations holds a node that the other does not, or the relation type is directed and the two relations hold the same two nodes
-     *      with the regulator and the target swapped. For example, one EGFR node regulates another in the forward-flow relation and is regulated by
-     *      it in the backfill twin.
+     *      the two relations connects a node that the other does not, or the relation type is directed and the two relations connect the same two
+     *      nodes with the regulator and the target swapped. For example, one EGFR node regulates another in the forward-flow relation and is
+     *      regulated by it in the backfill twin.
      *
      * Step 5 computes the normalized names of both forward-flow nodes and of backfill node 1 from their names in `forwardTwin` and `backfillTwin`. It
      * uses [[normalizedName]], the same function that step 3 uses to build the name key, so guarantee 2 holds for these names.
      *
      * Step 5 uses these terms:
      *
-     *   - A name-matched node pair is a node of the forward-flow relation and a node that the backfill twin holds in its place. The two nodes always
-     *     have the same normalized name. Step 5 stores it as the struct `{role, forwardNodeUri, backfillNodeUri, matchedNodeName}`.
+     *   - A name-matched node pair is a node of the forward-flow relation and a node that the backfill twin connects in its place. The two nodes
+     *     always have the same normalized name. Step 5 stores it as the struct `{role, forwardNodeUri, backfillNodeUri, matchedNodeName}`.
      *   - An identical node pair is a name-matched node pair whose forward-flow node and backfill node have the same node URN.
      *   - A homonymous node pair is a name-matched node pair whose two nodes have different node URNs.
      *   - A name-matched node pair tuple is one way to pair the two nodes of the forward-flow relation with the two nodes of its backfill twin, in
-     *     which each forward-flow node goes with a node that the backfill twin holds in its place. It holds two name-matched node pairs, the one of
-     *     forward-flow node 1 first and the one of forward-flow node 2 second.
+     *     which each forward-flow node goes with a node that the backfill twin connects in its place. It holds two name-matched node pairs, the one
+     *     of forward-flow node 1 first and the one of forward-flow node 2 second.
      *   - The straight tuple puts forward-flow node 1 with backfill node 1, and forward-flow node 2 with backfill node 2. The crossed tuple puts
      *     forward-flow node 1 with backfill node 2, and forward-flow node 2 with backfill node 1.
      *
-     * Step 5 applies the first rule that fits. A node appears in both relations when the forward-flow relation and the backfill twin both hold its
-     * node URN. A relation holds the same node twice when its two nodes have the same node URN, such as an EGFR node that binds itself, and not when
-     * two different nodes have the same normalized name.
+     * Step 5 applies the first rule that fits. A node appears in both relations when the forward-flow relation and the backfill twin both connect it.
+     * A relation connects a node to itself when its two nodes have the same node URN, such as an EGFR node that binds itself, and not when two
+     * different nodes have the same normalized name.
      *
      *   - Rule A. In a directed relation, the forward-flow regulator goes with the backfill regulator, and the forward-flow target goes with the
      *     backfill target. The name key already holds their normalized names in role order, so step 5 tests no name. The homonymous node pairs are
@@ -267,10 +267,10 @@ object DataOps:
      *     two node URNs always differ, because the node pair of the shared node is an identical node pair, and guarantee 3 makes at least one node
      *     pair differ.
      *   - Rule C2. When the two nodes of an undirected relation have the same normalized name, no node appears in both relations, and at least one
-     *     relation holds the same node twice, every node of the other relation goes with that repeated node. When both relations hold a node twice,
-     *     the two repeated nodes go with each other. Both node pairs are homonymous node pairs, because no node appears in both relations.
+     *     relation connects a node to itself, every node of the other relation goes with that node. When both relations connect a node to itself,
+     *     these two nodes go with each other. Both node pairs are homonymous node pairs, because no node appears in both relations.
      *   - Rule C3. When the two nodes of an undirected relation have the same normalized name, no node appears in both relations, and neither
-     *     relation holds the same node twice, the four nodes are different nodes with the same normalized name. All four are therefore homonyms of
+     *     relation connects a node to itself, the four nodes are different nodes with the same normalized name. All four are therefore homonyms of
      *     one another, which is what step 5 looks for, and each backfill node can stand in place of either forward-flow node. So step 5 takes both
      *     tuples, and the homonymous node pairs are all four node pairs: each forward-flow node with each backfill node.
      *
@@ -370,12 +370,13 @@ object DataOps:
     /**
      * ==Step 5: the homonymous node pairs of each twin pair, the detail table==
      *
-     * From each twin pair, step 5 keeps the node pairs of its tuples whose two node URNs differ: its homonymous node pairs. A twin pair of rule C3
-     * gives the four node pairs of its two tuples, because all four of its nodes are homonyms of one another, and each backfill node can stand in
-     * place of either forward-flow node.
+     * From each twin pair, step 5 keeps the node pairs of its tuples whose two node URNs differ: its homonymous node pairs. For a twin pair of rule
+     * C3, step 5 keeps all four node pairs of its two tuples, because all four of its nodes are homonyms of one another, and each backfill node can
+     * stand in place of either forward-flow node.
      *
-     * One row is one entry: a homonymous node pair, the role at which the twin pair gives it, and the twin pair. Repeated entries stay. A twin pair
-     * in which both relations hold a node twice gives the same homonymous node pair twice.
+     * One row is one entry: a homonymous node pair, the role at which the twin pair connects its two nodes, and the twin pair. Repeated entries stay.
+     * When both relations of a twin pair connect a node to itself, the twin pair connects to the same homonymous node pair at both positions, which
+     * makes two entries.
      *
      * Columns: forwardNodeUri, backfillNodeUri, matchedNodeName, role, forwardCanonicalId, backfillCanonicalId,
      * nonIdenticalTwinsAlsoWithinForwardFlow. One row has the fields of [[DataTypes.HomonymousNodePairWithTwinPair]].
@@ -406,10 +407,10 @@ object DataOps:
     /**
      * ==Step 5: each homonymous node pair once, with its number of twin pairs, the global table==
      *
-     * One row is one homonymous node pair across all twin pairs. `nonIdenticalTwinPairCount` is the number of distinct twin pairs that give the node
-     * pair, each twin pair identified by forwardCanonicalId and backfillCanonicalId together. A twin pair that gives the same node pair twice counts
-     * once. Each node has exactly one name (section 4.3 of BioMed Knowledge Graph (Graph) Data Model), so the node pair fixes matchedNodeName, and
-     * grouping on it as well does not change the groups.
+     * One row is one homonymous node pair across all twin pairs. `nonIdenticalTwinPairCount` is the number of distinct twin pairs that connect to the
+     * node pair, each twin pair identified by forwardCanonicalId and backfillCanonicalId together. A twin pair that connects to the same node pair at
+     * both positions counts once. Each node has exactly one name (section 4.3 of BioMed Knowledge Graph (Graph) Data Model), so the node pair fixes
+     * matchedNodeName, and grouping on it as well does not change the groups.
      *
      * Columns: forwardNodeUri, backfillNodeUri, matchedNodeName, nonIdenticalTwinPairCount. One row has the fields of
      * [[DataTypes.HomonymousNodePairWithTwinCount]].
