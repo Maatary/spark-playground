@@ -280,7 +280,7 @@ For the two examples, the detail table holds one entry each, and the global tabl
 | File | What it holds |
 |---|---|
 | `DataTypes.scala` | It holds the data model of the twin search: the input row `RelationOccurrence`, the canonical relation rows `CanonicalRelation` and `CanonicalRelationWithNameKey`, the name key `CanonicalRelationNameKey`, the twin pair row `TwinPairRecord` that step 4 writes in `nonIdenticalTwinPairs`, the `source` and `direction` values, the three roles, the name-matched node pair `NameMatchedNodePair` that step 5 stores, the name-matched node pair tuple `NameMatchedNodePairTuple`, the row `TwinPairWithNameMatchedNodePairTuples` of `twinPairsWithNameMatchedNodePairTuples`, the homonymous node pair row `HomonymousNodePairWithTwinPair` that step 5 writes in the detail table, and `HomonymousNodePairWithTwinCount`, one row of the global table. |
-| `DataOps.scala` | It holds the five steps, each documented next to its code. |
+| `TwinOps.scala` | It holds the five steps, each documented next to its code. |
 | `TwinSearchApp.scala` | It reads the relation occurrences, runs the five steps, writes the five tables and prints the four numbers. |
 | `TwinSearchTestCases.scala` | It runs the five steps on 14 small lists of relation occurrences, with at least one for each rule of step 5, and checks that the steps find the expected twin pair and its homonymous node pairs. |
 

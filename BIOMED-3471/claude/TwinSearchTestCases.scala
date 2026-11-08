@@ -1,6 +1,6 @@
 package biomed3471.claude
 
-import biomed3471.claude.DataOps.*
+import biomed3471.claude.TwinOps.*
 import biomed3471.claude.DataTypes.*
 import org.apache.spark.sql.{Encoder, SparkSession}
 import org.apache.spark.sql.functions.*
@@ -12,13 +12,13 @@ import scala.util.chaining.scalaUtilChainingOps
  * == The test cases of the twin search ==
  *
  * Each test case is a few relation occurrences whose canonical relations form one twin pair. TwinSearchTestCases runs steps
- * 1 to 5 of [[DataOps]] on each test case on its own, and checks that the steps find the twin pair and its homonymous node
+ * 1 to 5 of [[TwinOps]] on each test case on its own, and checks that the steps find the twin pair and its homonymous node
  * pairs. It prints what the steps must find next to what they find: the twin pair with its two canonical relation IDs and
  * its flag nonIdenticalTwinsAlsoWithinForwardFlow, its nameMatchedNodePairTuples as Spark prints them, the entries of
  * homonymousNodePairsPerTwinPair, and the rows of twinPairCountPerHomonymousNodePair.
  *
  * The first nine test cases give at least one example of each rule, A to C, and they include the seven examples in the
- * Scaladoc of [[DataOps.nameMatchedNodePairTuples]]. P1, P2, P3 and P4 are protein nodes named insulin or INSR. E1, E2, E3
+ * Scaladoc of [[TwinOps.nameMatchedNodePairTuples]]. P1, P2, P3 and P4 are protein nodes named insulin or INSR. E1, E2, E3
  * and E4 are four different protein nodes named EGFR, in the order of their node TERMite IDs. N1 and N2 are two more protein
  * nodes named EGFR, and in test case 9 each relation is a Regulation from one of them to itself. The last five test cases
  * show what the first nine do not: rule B with the names in the same order in both relations, names that differ only in

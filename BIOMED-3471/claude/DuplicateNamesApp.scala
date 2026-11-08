@@ -1,6 +1,6 @@
 package biomed3471.claude
 
-import biomed3471.claude.DataOps.normalizedName
+import biomed3471.claude.TwinOps.normalizedName
 import biomed3471.claude.DataTypes.*
 import io.delta.implicits.*
 import io.github.pashashiz.spark_encoders.TypedEncoder

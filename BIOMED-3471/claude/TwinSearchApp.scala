@@ -2,7 +2,7 @@ package biomed3471.claude
 
 import sparkops.SchemaEnforcementOps.*
 import biomed3471.claude.DataTypes.*
-import biomed3471.claude.DataOps.*
+import biomed3471.claude.TwinOps.*
 import io.delta.implicits.*
 import org.apache.spark.sql.functions.*
 import io.github.pashashiz.spark_encoders.TypedEncoder.*
@@ -40,12 +40,12 @@ import scala.util.chaining.scalaUtilChainingOps
  *     twin, which is a canonical relation supported by at least one backfill relation occurrence.
  *   - A homonymous node pair is composed of a node connected by a forward-flow relation and a node connected in its place by one of its backfill
  *     twins. Both nodes have the same normalized name but different node URNs. Step 5 finds them with rules A to C of
- *     [[DataOps.nameMatchedNodePairTuples]], which pair each forward-flow node with a backfill node of the same normalized name. When the relation
+ *     [[TwinOps.nameMatchedNodePairTuples]], which pair each forward-flow node with a backfill node of the same normalized name. When the relation
  *     type of a twin pair is undirected and its four nodes are four different nodes with the same normalized name, all four are homonyms of one
  *     another, and each backfill node can stand in place of either forward-flow node, so the twin pair connects to four homonymous node pairs, each
  *     forward-flow node with each backfill node.
  *
- * TwinSearchApp reads the relation occurrences from the input and runs the five steps of [[DataOps]] in order. Steps 1 and 2 turn the relation
+ * TwinSearchApp reads the relation occurrences from the input and runs the five steps of [[TwinOps]] in order. Steps 1 and 2 turn the relation
  * occurrences into canonical relations, steps 3 and 4 find the twin pairs, and step 5 finds the homonymous node pairs in each twin pair. The results
  * of steps 2, 4 and 5 are saved in five Delta tables:
  *

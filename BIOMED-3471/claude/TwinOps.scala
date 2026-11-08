@@ -9,14 +9,14 @@ import io.github.pashashiz.spark_encoders.TypedEncoder.*
 /**
  * ==The five steps of the twin search==
  *
- * DataOps holds the Column and DataFrame operations of steps 1 to 5. The steps rely on guarantees from two pages of the data model:
+ * TwinOps holds the Column and DataFrame operations of steps 1 to 5. The steps rely on guarantees from two pages of the data model:
  *
  *   - Section 2.2 of BioMed Data Identifier Schemes builds the canonical relation ID:
  *     [[https://elsevier.atlassian.net/wiki/spaces/ELSSIE/pages/119601216791062/BioMed+Data+Identifier+Schemes]]
  *   - Section 4.3 of BioMed Knowledge Graph (Graph) Data Model gives each node exactly one name, stored as `skos:prefLabel`:
  *     [[https://elsevier.atlassian.net/wiki/spaces/ELSSIE/pages/119601199850466/BioMed+Knowledge+Graph+Graph+Data+Model]]
  */
-object DataOps:
+object TwinOps:
 
     /**
      * The node TERMite ID in a node URN: its last part, such as `Concept_700527820` in `biodata:smallmol/Concept_700527820`.
